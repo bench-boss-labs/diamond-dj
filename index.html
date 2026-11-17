@@ -42,6 +42,9 @@
     <button class="lock-btn" id="lockBtn" aria-pressed="false">
       <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><span>Lock</span>
     </button>
+    <button class="icon-btn" id="helpBtn" aria-label="Help" title="Help">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 17h.01"/></svg>
+    </button>
     <button class="icon-btn" id="settingsBtn" aria-label="Settings" title="Settings">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
     </button>
@@ -61,6 +64,18 @@
   <div class="dlg-head"><h2 id="dlgTitle"></h2><button class="btn" id="dlgClose">Done</button></div>
   <div class="dlg-body" id="dlgBody"></div>
 </dialog>
+
+<!-- A new version has downloaded: offered when nothing is playing (js/app.js, 12. HELP, INSTALL, UPDATES) -->
+<div id="updateBar" class="update-bar" role="status" hidden>
+  <p><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg><span>A new version of Diamond DJ is ready<span id="updateVer"></span>.</span></p>
+  <details id="updateNotes" class="rn-wrap" hidden><summary>See what's new</summary><div id="updateNotesList"></div></details>
+  <div class="row"><button id="updateNow" class="btn gold" type="button">Update now</button><button id="updateLater" class="btn" type="button">Later</button></div>
+</div>
+<!-- Once, right after an update -->
+<div id="newsBar" class="update-bar" role="status" hidden>
+  <p><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span>Diamond DJ updated to <span id="newsVer"></span>.</span></p>
+  <div class="row"><button id="newsSee" class="btn gold" type="button">See what's new</button><button id="newsOk" class="btn" type="button">OK</button></div>
+</div>
 
 <div id="toast" class="toast" role="status" hidden></div>
 

@@ -12,6 +12,7 @@
  *   9. EVENTS AND STARTUP
  *  10. KEY MOMENTS (playing them on Game, editing them on Moments)
  *  11. LOCK
+ *  12. HELP, INSTALL, UPDATES (release notes, install button, new-version messages)
  */
 'use strict';
 
@@ -735,10 +736,13 @@ function openSettings() {
     <p class="hint">A made-up team of nine with test tones for songs and chimes for announcements. Replaces the players and lineups on this device.</p>
     <div class="row"><button class="btn" id="setDemo">Load the demo team</button></div>
     <h3>This device</h3>
+    <div id="installBox" class="stack"></div>
     <p class="hint" id="setStorage">Checking storage…</p>
-    <p class="hint">Diamond DJ ${esc(window.APP_VERSION || '')}</p>`, () => render());
+    <div class="row"><span class="hint">Diamond DJ ${esc(versionText())}</span><button class="btn small" id="setHelp">Help and what's new</button></div>`, () => render());
 
   paintDrive();
+  paintInstall();
+  $('#setHelp').onclick = () => openHelp('news');
   $('#setTeamName').oninput = e => { team.name = e.target.value; saveTeam(); };
   $('#setTeamShort').oninput = e => { team.short = e.target.value; saveTeam(); $('#teamName').textContent = team.short || team.name || 'Diamond DJ'; };
   $('#setNewGame').onclick = e => { if (!armed(e.currentTarget, 'Tap again: start from batter 1')) return; newGame(); };
@@ -1249,8 +1253,8 @@ async function runPublish() {
 /* Coming back from Google's sign-in page: carry on with what the person was doing. */
 function resumeAfterSignIn() {
   const r = Auth.consume();
-  if (!r) return;
-  if (settings.locked && r.resume) { toast('Unlock first to use Google Drive.'); return; }
+  if (!r) return false;
+  if (settings.locked && r.resume) { toast('Unlock first to use Google Drive.'); return true; }
   openSettings();
   if (r.error) {
     dui.note = r.error === 'access_denied' ? 'Google sign-in was cancelled.' : 'Google sign-in didn’t finish. Try again.';
@@ -1258,6 +1262,7 @@ function resumeAfterSignIn() {
   }
   if (r.resume === 'publish') startPublish();
   else startCheck();
+  return true;
 }
 
 /* ==================================================================== 9. EVENTS AND STARTUP */
@@ -1586,6 +1591,7 @@ $('#fadeAll').addEventListener('click', () => Sound.fadeAll(settings.fadeSeconds
 $('#stopAll').addEventListener('click', () => Sound.stopAll());
 $('#master').addEventListener('input', e => { settings.masterVolume = +e.target.value; Sound.setMaster(settings.masterVolume); saveSettings(); });
 $('#settingsBtn').addEventListener('click', openSettings);
+$('#helpBtn').addEventListener('click', () => openHelp());
 $('#teamName').addEventListener('click', openTeams);
 let dockFrame = 0;
 Sound.onChange(() => { if (!dockFrame) dockFrame = requestAnimationFrame(() => { dockFrame = 0; renderDock(); }); });
@@ -1597,9 +1603,229 @@ async function keepAwake() {
 }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') keepAwake(); });
 
+/* ==================================================================== 12. HELP, INSTALL, UPDATES */
+
+/* Release notes: release-notes.json, built into version.js as DIAMOND_NOTES by tools/release.py. Newest first. */
+const cmpVer = (a, b) => {
+  const x = String(a).split('.').map(Number), y = String(b).split('.').map(Number);
+  for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) - (y[i] || 0);
+  return 0;
+};
+const Notes = {
+  TAG: { new: 'New', improved: 'Better', fixed: 'Fixed' },
+  list() { return window.DIAMOND_NOTES || []; },
+  date(d) { try { return new Date(d + 'T12:00:00').toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' }); } catch (e) { return d; } },
+  // versions after `from`, up to and including `to`
+  between(list, from, to) { return (list || []).filter(n => (!from || cmpVer(n.version, from) > 0) && (!to || cmpVer(n.version, to) <= 0)); },
+  items(n) { return `<ul class="rn">${n.notes.map(i => `<li><span class="rn-tag ${esc(i.type)}">${esc(this.TAG[i.type] || i.type)}</span><span>${esc(i.text)}</span></li>`).join('')}</ul>`; },
+  html(list) { return list.map(n => (list.length > 1 ? `<p class="rn-head">Version ${esc(n.version)} · ${esc(this.date(n.date))}</p>` : '') + this.items(n)).join(''); },
+  ver(n, open) {
+    return `<details class="rn-ver"${open ? ' open' : ''}><summary>Version ${esc(n.version)} · ${esc(this.date(n.date))}${n.version === window.APP_VERSION ? ' <small>(this version)</small>' : ''}</summary>${this.items(n)}</details>`;
+  },
+};
+
+// "Version 0.5.0 · built 2026-11-17 09:40": what to read out to the organizer over the phone
+function versionText() {
+  const B = window.DIAMOND_BUILD || {};
+  return `Version ${window.APP_VERSION || ''}${B.built ? ` · built ${B.built}` : ''}`;
+}
+
+/* Install. Chrome on Android (and on computers) offers a one-tap install through
+   `beforeinstallprompt`; Safari on iPad and iPhone doesn't, so they get the steps. */
+let installPrompt = null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installPrompt = e; paintInstall(); });
+window.addEventListener('appinstalled', () => { installPrompt = null; toast('Diamond DJ is on your home screen. Open it from the Bees icon from now on.', 6000); paintInstall(); });
+const installed = () => matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches || navigator.standalone === true;
+function deviceKind() {
+  const ua = navigator.userAgent;
+  const ios = /iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  if (ios) return /CriOS|FxiOS|EdgiOS/.test(ua) ? 'ios-other' : 'ios';
+  if (/SamsungBrowser/.test(ua)) return 'samsung';
+  if (/Android/.test(ua)) return /Chrome/.test(ua) && !/EdgA|OPR|Firefox/.test(ua) ? 'android' : 'android-other';
+  return /Chrome|Edg/.test(ua) ? 'computer' : 'other';
+}
+const INSTALL_STEPS = {
+  android: `<ol class="steps"><li>Tap Chrome's menu <b>⋮</b> (top right).</li><li>Tap <b>Add to Home screen</b> (it may say <b>Install app</b>), then <b>Install</b>.</li>
+    <li>Open Diamond DJ from the Bees icon from now on.</li></ol>
+    <p class="hint">If it says the app is already installed but it won't open, choose <b>Create shortcut</b> instead: it works the same way.</p>`,
+  samsung: `<ol class="steps"><li>Tap the menu <b>≡</b> (bottom right).</li><li>Tap <b>Add page to</b>, then <b>Home screen</b>.</li>
+    <li>Open Diamond DJ from the Bees icon from now on.</li></ol><p class="hint">Chrome works best: open the web address in Chrome if you can.</p>`,
+  ios: `<ol class="steps"><li>Tap <b>Share</b> (the square with an arrow, at the top on iPad, at the bottom on iPhone).</li>
+    <li>Scroll down and tap <b>Add to Home Screen</b>, then <b>Add</b>.</li><li>Always open Diamond DJ from that icon: Safari can clear a website's saved songs if it isn't on the Home Screen.</li></ol>`,
+  'ios-other': `<p>On iPad and iPhone, apps go on the Home Screen from <b>Safari</b>. Open this web address in Safari, tap <b>Share</b>, then <b>Add to Home Screen</b>.</p>`,
+  'android-other': `<p>Open this web address in <b>Chrome</b>, then tap Chrome's menu <b>⋮</b> › <b>Add to Home screen</b>.</p>`,
+  computer: `<p>Click the install icon at the right end of the address bar, or the browser menu <b>⋮</b> › <b>Cast, save and share</b> › <b>Install page as app</b>.</p>`,
+  other: `<p>Open this web address in <b>Chrome</b> (Android or computer) or <b>Safari</b> (iPad, iPhone), then add it to the home screen from the browser's menu.</p>`,
+};
+function paintInstall(steps = false) {
+  const box = $('#installBox');
+  if (!box) return;
+  if (installed()) { box.innerHTML = '<p class="ok-line">✓ Installed. Diamond DJ is opening from its home-screen icon.</p>'; return; }
+  box.innerHTML = `<div class="row"><button class="btn primary" id="setInstall">Install Diamond DJ</button></div>
+    <p class="hint">Puts the app on the home screen with the Bees icon. It opens full screen and works without wifi.</p>
+    ${steps ? `<div class="install-steps">${INSTALL_STEPS[deviceKind()]}</div>` : ''}`;
+  $('#setInstall').onclick = async () => {
+    if (!installPrompt) return paintInstall(true);
+    const p = installPrompt; installPrompt = null;
+    try {
+      await p.prompt();
+      const r = await p.userChoice;
+      if (r && r.outcome !== 'accepted') paintInstall(true);
+    } catch (e) { paintInstall(true); }
+  };
+}
+
+/* Help: short answers here; every question, step by step, in the full guide (guide/index.html). */
+function openHelp(section) {
+  const list = Notes.list();
+  const lastCheck = Drive.state.lastCheck ? new Date(Drive.state.lastCheck).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' }) : 'never';
+  const q = (title, body) => `<details class="faq"><summary>${title}</summary><div>${body}</div></details>`;
+  openDialog('Help', `
+    <p class="version-line">${esc(versionText())}</p>
+    <a class="guide-link" href="guide/" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5V21h16"/></svg>
+      <span><b>Full guide</b><small>Every question, step by step, for tablets, phones and iPad. Opens in your browser, even without wifi.</small></span>
+      <svg class="out" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+
+    <h3>Game day</h3>
+    <ol class="steps">
+      <li>At home on wifi: <b>Settings › Check for updates</b>, so you have the newest roster, lineups and songs.</li>
+      <li>At the field: connect the speaker first (Bluetooth or cable), then open Diamond DJ from its icon.</li>
+      <li>On <b>Game</b>, check the lineup at the top and tap <b>New game</b> (twice) so every song can play again.</li>
+      <li>When a batter walks up, tap <b>Play walkup</b>: the announcement, then their song. The order moves to the next batter by itself. <b>Skip</b> passes over someone.</li>
+      <li>Batter not in order? Tap anyone in the list to play them. Press and hold a name to make them up next.</li>
+      <li>Key moments (Home Run, Strikeout…) and breaks (Pitcher Warmup, Between Innings…): tap to play, tap again to fade out.</li>
+      <li><b>Fade out</b> when play starts. <b>Stop</b> cuts everything at once.</li>
+      <li>Tap <b>Lock</b> so nobody changes the setup by accident. Game and Lineup stay open. Press and hold the lock for 1.5 seconds to unlock.</li>
+    </ol>
+
+    <h3>Common questions</h3>
+    ${q('Nothing plays.', `<p>Check the tablet's volume, the <b>Volume</b> slider at the bottom, and that the speaker is connected. A batter marked <b>Not ready</b> has no announcement or song on this device yet: tap <b>Settings › Check for updates</b> on wifi.</p>`)}
+    ${q('A batter says “No announcement”.', `<p>Their song still plays, with no announcement first. The clip is added in <b>Roster</b> (tap the player, then <b>Choose a clip</b>), or comes with <b>Check for updates</b> once the organizer publishes it.</p>`)}
+    ${q('The batting order changed (someone is late, sick or leaving early).', `<p>On <b>Game</b>, tap <b>Edit order</b>: drag a batter to move them, or tap <b>Bench</b> to take them out (and <b>Add back</b> when they arrive). It saves as you go. Saved lineups for other games are on the <b>Lineup</b> screen.</p>`)}
+    ${q('The wrong song or player played.', `<p>Tap <b>Fade out</b>, then tap the right batter in the list. To put the order back where it should be, press and hold the batter who should be up next.</p>`)}
+    ${q('A key moment button does nothing.', `<p>It has no songs yet. Add songs to it on the <b>Moments</b> screen (unlock first). A tap on a playing button fades it out.</p>`)}
+    ${q('Roster, Songs, Moments and Settings are gone.', `<p>The app is locked. Press and hold the lock button at the top for a second and a half.</p>`)}
+    ${q('The screen turns off during the game.', `<p>Diamond DJ keeps the screen on while it's open where the device allows. If it still turns off: <b>Android:</b> Settings › Display › Screen timeout › the longest time. <b>iPad / iPhone:</b> Settings › Display &amp; Brightness › Auto-Lock › Never.</p>`)}
+    ${q('How do I put it on the home screen?', `<p><b>Settings › This device › Install Diamond DJ</b>. If your device can't do it in one tap, it shows you the steps. Then always open it from the Bees icon.</p>`)}
+    ${q('It says “A new version of Diamond DJ is ready”.', `<p>Tap <b>Update now</b> when nothing is playing. Your teams, lineups and songs stay. <b>Later</b> keeps this version until the app is opened again. Small fixes install by themselves; the screen may blink for a second.</p>`)}
+    ${q('The wrong team is showing.', `<p>Tap the team name at the top left and pick your team. Missing? Tap <b>Settings › Check for updates</b> and tick it.</p>`)}
+    ${q('Will Check for updates undo my lineup?', `<p>No. A lineup changed on this device is kept. Roster and moment changes made on this device are flagged first, so you can choose to keep them.</p>`)}
+
+    <div ${Drive.state.editor ? '' : 'hidden'}>
+    <h3>For organizers</h3>
+    ${q('How do I send changes to every device?', `<p><b>Settings › Publish to Drive</b>. It lists what will be sent (new songs, announcement clips, the team file) before anything goes. Volunteers get it the next time they tap <b>Check for updates</b>. Nothing in Drive is deleted, and Drive keeps earlier versions.</p>`)}
+    ${q('How do I add a volunteer?', `<p>Share the <b>Diamond DJ</b> Google Drive folder with their Google account as <b>Viewer</b> (or <b>Editor</b> for someone who will publish). While the app is in testing, also add them in Google Cloud (Diamond DJ project › Google Auth Platform › Audience › <b>Test users</b>).</p>`)}
+    ${q('How do I add a song or set where it starts?', `<p><b>Songs › Add songs</b> and pick MP3s. Tap a song, play it, then <b>Set start here</b> at the catchy part and <b>Set stop here</b> where it should end. Link it to a player in <b>Roster</b>, then publish.</p>`)}
+    </div>
+
+    <details id="whatsNew" class="whats-new" ${list.length ? '' : 'hidden'} ${section === 'news' ? 'open' : ''}><summary>What's new</summary>
+      ${list.slice(0, 3).map((n, i) => Notes.ver(n, i === 0)).join('')}
+      ${list.length > 3 ? '<p class="hint"><a href="#appHistory" id="toHistory">Every past update</a></p>' : ''}</details>
+    ${list.length > 3 ? `<details id="appHistory" class="whats-new"><summary>App history: every update</summary>${list.map(n => Notes.ver(n, false)).join('')}</details>` : ''}
+    <p class="hint">Still stuck? Send your organizer the version line at the top and what happened.</p>
+    <p class="hint about">Diamond DJ ${esc(versionText())} · ${esc(team.name)} · Last Drive check: ${esc(lastCheck)}</p>`);
+  const th = $('#toHistory');
+  if (th) th.onclick = e => { e.preventDefault(); $('#appHistory').open = true; $('#appHistory').scrollIntoView({ block: 'start', behavior: 'smooth' }); };
+  if (section === 'news') setTimeout(() => $('#whatsNew').scrollIntoView({ block: 'start' }), 0);
+}
+
+/* Updates. A new version downloads in the background (sw.js). Offer it with a banner, but never
+   while something is playing or Drive is downloading. "Later" keeps this version until the app is
+   next opened. A quiet release (small fixes) switches over by itself when it can't get in the way. */
+const appQuiet = () => !Sound.playing().some(t => t.state !== 'done') && dui.phase !== 'busy';
+function placeBar(el) {
+  const dock = $('.dock');
+  const at = () => { el.style.bottom = `${Math.round(innerHeight - dock.getBoundingClientRect().top + 10)}px`; };
+  at(); addEventListener('resize', at);
+}
+const Update = {
+  async ready() {
+    if (this.shown) return;
+    clearTimeout(this._w);
+    if (!appQuiet()) { this._w = setTimeout(() => this.ready(), 2000); return; }
+    this.shown = true;
+    let fresh = [];
+    try { fresh = Notes.between(await (await fetch('release-notes.json', { cache: 'no-cache' })).json(), window.APP_VERSION); } catch (e) {}
+    $('#updateVer').textContent = fresh.length ? ` (version ${fresh[0].version})` : '';
+    $('#updateNotes').hidden = !fresh.length;
+    $('#updateNotesList').innerHTML = Notes.html(fresh);
+    $('#newsBar').hidden = true; // one message at a time
+    const el = $('#updateBar'); el.hidden = false; placeBar(el);
+    $('#updateNow').onclick = async () => {
+      $('#updateNow').disabled = true; $('#updateNow').textContent = 'Updating…';
+      Sound.stopAll();
+      await saveNow().catch(() => {});
+      location.reload();
+    };
+    $('#updateLater').onclick = () => { el.hidden = true; };
+  },
+  quiet() {
+    if (this.shown) return; // a banner for a bigger update is up: that one wins
+    this.pending = true;
+    if (Date.now() - Seen.at < 20000 && !Seen.touched) this.applyQuiet();
+  },
+  async applyQuiet() {
+    if (!this.pending || this.shown || this._going || !appQuiet() || dlg.open || drag) return;
+    this._going = true;
+    await saveNow().catch(() => {});
+    location.reload();
+  },
+};
+// when the app was last opened or brought back on screen, and whether it's been touched since
+const Seen = { at: Date.now(), touched: false };
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  Seen.at = Date.now(); Seen.touched = false;
+  Update.applyQuiet();
+});
+document.addEventListener('pointerdown', () => { Seen.touched = true; }, { capture: true });
+
+/* Once, right after an update: "Diamond DJ updated to 0.5.0 · See what's new". Not on a brand-new
+   install, not for quiet releases, and not while coming back from Google sign-in. */
+const News = {
+  KEY: 'diamond.seenVersion',
+  check({ signingIn, existing }) {
+    let seen = null;
+    try { seen = localStorage.getItem(this.KEY); } catch (e) {}
+    if (!seen && existing) seen = '0.4.0'; // set up before versions were tracked
+    if (!seen || cmpVer(window.APP_VERSION, seen) <= 0) return this.mark();
+    if (signingIn) return;
+    const fresh = Notes.between(Notes.list(), seen, window.APP_VERSION).filter(n => !n.quiet);
+    if (!fresh.length) return this.mark();
+    const show = () => {
+      if (!appQuiet() || dlg.open) { setTimeout(show, 2000); return; }
+      this.mark();
+      if (!$('#updateBar').hidden) return; // an even newer version is waiting: that message wins
+      const el = $('#newsBar'); $('#newsVer').textContent = window.APP_VERSION; el.hidden = false; placeBar(el);
+      $('#newsSee').onclick = () => { el.hidden = true; openHelp('news'); };
+      $('#newsOk').onclick = () => { el.hidden = true; };
+    };
+    setTimeout(show, 1200);
+  },
+  mark() { try { localStorage.setItem(this.KEY, window.APP_VERSION); } catch (e) {} },
+};
+
+function startUpdates() {
+  if (!('serviceWorker' in navigator) || !(location.protocol === 'https:' || location.hostname === 'localhost')) return;
+  const hadCopy = !!navigator.serviceWorker.controller; // not on the very first install
+  navigator.serviceWorker.addEventListener('message', e => {
+    if (!hadCopy || !e.data) return;
+    if (e.data.type === 'diamond-updated') Update.ready();
+    if (e.data.type === 'diamond-updated-quiet') Update.quiet();
+  });
+  // look for a new version each time the app is opened or comes back on screen (at most once a minute)
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => {
+    let last = 0;
+    const check = () => { if (navigator.onLine !== false && Date.now() - last > 60000) { last = Date.now(); reg.update().catch(() => {}); } };
+    check();
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(); });
+  }).catch(e => console.warn('Offline copy not installed', e));
+}
+
 async function start() {
   Sound.setLoader(path => Store.audio.get(path));
-  let cur = null;
+  let cur = null, existing = false;
   try {
     let ts, oneTeam, lib, gs, oneGame, st, paths;
     [ts, cur, oneTeam, lib, gs, oneGame, st, paths] = await Promise.all([Store.get('teams'), Store.get('currentTeam'),
@@ -1608,6 +1834,7 @@ async function start() {
     library = lib ? Model.checkLibrary(lib) : Model.newLibrary();
     paths.forEach(p => stored.add(p));
     games = gs || {};
+    existing = !!(ts || oneTeam);
     for (const raw of Object.values(ts || {})) { const t = Model.checkTeam(raw); teams[t.id] = t; }
     if (!ts && oneTeam) { // version 0.2 kept one team: carry it (and its game state) over
       const t = Model.checkTeam(oneTeam);
@@ -1628,11 +1855,10 @@ async function start() {
   applyLock();
   render();
   renderDock();
-  resumeAfterSignIn(); // back from Google's sign-in page?
+  const signingIn = resumeAfterSignIn(); // back from Google's sign-in page?
   keepAwake();
   Store.persist();
-  if ('serviceWorker' in navigator && location.protocol === 'https:') {
-    navigator.serviceWorker.register('sw.js').catch(e => console.warn('Offline copy not installed', e));
-  }
+  News.check({ signingIn, existing });
+  startUpdates();
 }
 start();

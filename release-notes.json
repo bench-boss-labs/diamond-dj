@@ -1,0 +1,13 @@
+[
+  {
+    "version": "0.5.0",
+    "date": "2026-11-17",
+    "notes": [
+      { "type": "new", "text": "Help: tap the ? at the top for a game-day checklist, answers to common questions and a link to the full guide. It works while the app is locked, too." },
+      { "type": "new", "text": "Full guide: every question step by step, for Android tablets, phones and iPad. It opens in your browser and works without wifi." },
+      { "type": "new", "text": "Settings › This device › Install Diamond DJ puts the app on your home screen with the Bees icon. If your device can't do it in one tap, it shows you the steps." },
+      { "type": "new", "text": "What's new and App history in Help: see what changed in each version." },
+      { "type": "new", "text": "When a new version is ready, a message tells you what's in it, with Update now and Later. It waits until nothing is playing. Small fixes install by themselves." }
+    ]
+  }
+]

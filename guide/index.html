@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="theme-color" content="#0B2447">
+<title>Diamond DJ guide</title>
+<link rel="icon" type="image/png" href="../icons/icon-192.png">
+<style>
+@font-face { font-family: Barlow; font-weight: 400; src: url(../fonts/barlow-latin-400-normal.woff2) format("woff2"); }
+@font-face { font-family: Barlow; font-weight: 600; src: url(../fonts/barlow-latin-600-normal.woff2) format("woff2"); }
+@font-face { font-family: Barlow; font-weight: 700; src: url(../fonts/barlow-latin-700-normal.woff2) format("woff2"); }
+@font-face { font-family: "Barlow Condensed"; font-weight: 700; src: url(../fonts/barlow-condensed-latin-700-normal.woff2) format("woff2"); }
+:root { --navy: #0B2447; --navy-2: #12305C; --gold: #F5B700; --gold-soft: #FFF6D6; --gold-text: #8A6400; --blue: #1E56B8; --ground: #EEF2F8; --card: #fff; --ink: #0B1730; --muted: #4A5874; --line: #D3DBE8; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--ground); color: var(--ink); font: 17px/1.5 Barlow, system-ui, sans-serif; }
+header { background: var(--navy); color: #fff; border-bottom: 5px solid var(--gold); }
+.wrap { max-width: 780px; margin: 0 auto; padding: 0 16px; }
+header .wrap { display: flex; align-items: center; gap: 14px; padding-top: max(18px, env(safe-area-inset-top)); padding-bottom: 18px; }
+header img { width: 52px; height: 52px; border-radius: 12px; }
+h1 { margin: 0; font: 700 34px/1 "Barlow Condensed", sans-serif; text-transform: uppercase; letter-spacing: .02em; }
+header p { margin: 4px 0 0; color: #DCE6F7; font-size: 15px; }
+h2 { font: 700 26px/1.1 "Barlow Condensed", sans-serif; text-transform: uppercase; letter-spacing: .04em; color: var(--navy); margin: 40px 0 12px; padding-top: 10px; border-top: 2px solid var(--line); }
+h3 { font-size: 18px; margin: 0 0 6px; color: var(--navy); }
+section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin: 10px 0; scroll-margin-top: 12px; }
+section p { margin: 0 0 8px; } section p:last-child, section ol:last-child, section ul:last-child { margin-bottom: 0; }
+.hint { color: var(--muted); font-size: 15px; }
+.tip { background: var(--gold-soft); border-left: 4px solid var(--gold); padding: 8px 12px; border-radius: 8px; }
+a { color: var(--blue); }
+ol, ul { padding-left: 24px; margin: 0 0 8px; } li { margin: 4px 0; }
+b { color: var(--navy); }
+nav.toc { background: var(--card); border: 2px solid var(--gold); border-radius: 14px; padding: 12px 16px; margin: 18px 0; }
+nav.toc summary { cursor: pointer; font-weight: 700; color: var(--navy); }
+nav.toc h4 { margin: 12px 0 2px; font: 700 15px "Barlow Condensed", sans-serif; letter-spacing: .08em; text-transform: uppercase; color: var(--gold-text); }
+nav.toc ul { margin: 0; padding-left: 18px; columns: 2 280px; } nav.toc li { margin: 3px 0; break-inside: avoid; font-size: 16px; }
+.who { display: inline-block; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 1px 8px; border-radius: 999px; background: var(--navy); color: var(--gold); vertical-align: 2px; margin-left: 6px; }
+table { border-collapse: collapse; width: 100%; font-size: 15px; } td, th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+pre { background: var(--ground); padding: 10px 12px; border-radius: 8px; overflow: auto; font-size: 14px; }
+footer { color: var(--muted); font-size: 15px; padding: 30px 0 40px; }
+</style>
+</head>
+<body class="diamond-guide">
+<header><div class="wrap"><img src="../icons/icon-192.png" alt=""><div><h1>Diamond DJ guide</h1><p>Walk-up songs and game music, step by step. Back to the app: close this page.</p></div></div></header>
+<main class="wrap">
+
+<nav class="toc"><details open><summary>Questions on this page</summary>
+<h4>Getting started</h4>
+<ul>
+<li><a href="#what-is-it">What is Diamond DJ?</a></li>
+<li><a href="#install-android">How do I install it on an Android tablet or phone?</a></li>
+<li><a href="#install-ipad">How do I install it on an iPad or iPhone?</a></li>
+<li><a href="#already-installed">It says “already installed” but won't open.</a></li>
+<li><a href="#get-team">How do I get my team's roster and songs?</a></li>
+<li><a href="#screens">What are the screens for?</a></li>
+</ul>
+<h4>Game day</h4>
+<ul>
+<li><a href="#checklist">What should I do before the game?</a></li>
+<li><a href="#walkup">How do I play a walk-up?</a></li>
+<li><a href="#out-of-order">A batter comes up out of order.</a></li>
+<li><a href="#change-order">How do I change the order during a game?</a></li>
+<li><a href="#new-game">What do New game and Start from batter 1 do?</a></li>
+<li><a href="#moments">How do key moments and breaks work?</a></li>
+<li><a href="#fade-stop">Fade out, Stop and Volume</a></li>
+<li><a href="#lock">How does Lock work?</a></li>
+<li><a href="#phone">Using it on a phone</a></li>
+</ul>
+<h4>Lineups</h4>
+<ul>
+<li><a href="#lineups">How do saved lineups work?</a></li>
+<li><a href="#bench">How do I bench a player for one game?</a></li>
+</ul>
+<h4>Setting up a team</h4>
+<ul>
+<li><a href="#add-player">How do I add or change a player?</a></li>
+<li><a href="#announcement">How do I add a player's announcement?</a></li>
+<li><a href="#walkup-song">How do I give a player a walk-up song?</a></li>
+<li><a href="#under-after">Under the announcement, or after it?</a></li>
+<li><a href="#ready">What do Ready, No announcement and Not ready mean?</a></li>
+<li><a href="#add-songs">How do I add songs?</a></li>
+<li><a href="#start-stop">How do I make a song start at the good part?</a></li>
+<li><a href="#edit-moments">How do I make or change a key moment?</a></li>
+<li><a href="#teams">How do I switch teams or add one?</a></li>
+<li><a href="#settings">What do the Settings do?</a></li>
+</ul>
+<h4>Google Drive</h4>
+<ul>
+<li><a href="#updates">What does Check for updates do?</a></li>
+<li><a href="#my-changes">Will an update undo changes I made?</a></li>
+<li><a href="#not-verified">Google says “Google hasn't verified this app”.</a></li>
+</ul>
+<h4>For organizers</h4>
+<ul>
+<li><a href="#publish">How do I send changes to everyone?</a></li>
+<li><a href="#add-volunteer">How do I add a volunteer?</a></li>
+<li><a href="#drive-folder">What's in the Google Drive folder?</a></li>
+<li><a href="#make-announcements">How do I make announcement clips?</a></li>
+<li><a href="#backup">How do I back up a team?</a></li>
+</ul>
+<h4>Problems</h4>
+<ul>
+<li><a href="#nothing-plays">Nothing plays.</a></li>
+<li><a href="#delay">The sound is a little late on the speaker.</a></li>
+<li><a href="#screen-off">The screen turns off during the game.</a></li>
+<li><a href="#space">The device is running out of space.</a></li>
+<li><a href="#new-version">It says “A new version of Diamond DJ is ready”.</a></li>
+<li><a href="#version">Which version do I have, and what changed?</a></li>
+</ul>
+</details></nav>
+
+<h2>Getting started</h2>
+
+<section id="what-is-it"><h3>What is Diamond DJ?</h3>
+<p>A soundboard for youth baseball and softball volunteers. It plays each batter's announcement and walk-up song, plus music for key moments (Home Run, Strikeout…) and breaks (Pitcher Warmup, Between Innings…).</p>
+<p>It's a web page that installs like an app. Everything plays from the device, so <b>no wifi is needed at the field</b>. Internet is only needed to install it, download the team and get updates.</p>
+<p class="hint">Made for an Android tablet. Phones and iPads work too.</p></section>
+
+<section id="install-android"><h3>How do I install it on an Android tablet or phone?</h3>
+<ol>
+<li>Open <b>scalisec.github.io/diamond-dj</b> in <b>Chrome</b>.</li>
+<li>Tap the gear (<b>Settings</b>), scroll to <b>This device</b> and tap <b>Install Diamond DJ</b>, then <b>Install</b>.</li>
+<li>If the button shows steps instead: tap Chrome's menu <b>⋮</b> (top right) › <b>Add to Home screen</b> (or <b>Install app</b>) › <b>Install</b>.</li>
+<li>Close Chrome and open Diamond DJ from the Bees icon from now on.</li>
+</ol>
+<p class="hint">Samsung Internet: menu <b>≡</b> › <b>Add page to</b> › <b>Home screen</b>. Chrome works best.</p></section>
+
+<section id="install-ipad"><h3>How do I install it on an iPad or iPhone?</h3>
+<ol>
+<li>Open <b>scalisec.github.io/diamond-dj</b> in <b>Safari</b> (other browsers on iPad can't install apps).</li>
+<li>Tap <b>Share</b> (the square with an arrow: at the top on iPad, at the bottom on iPhone).</li>
+<li>Scroll down, tap <b>Add to Home Screen</b>, then <b>Add</b>.</li>
+</ol>
+<p class="tip">Always open it from the Home Screen icon. Safari can clear a website's saved songs if it isn't on the Home Screen.</p>
+<p class="hint">No sound with the ring/silent switch on silent? Turn silent off, or update iOS.</p></section>
+
+<section id="already-installed"><h3>It says “already installed” but won't open.</h3>
+<p>This can happen on an Android phone when Diamond DJ is installed on another device signed in to the same Google account: Chrome thinks this phone has it too.</p>
+<ol>
+<li>In Chrome, open the web address, tap <b>⋮</b> › <b>Add to Home screen</b>.</li>
+<li>Choose <b>Create shortcut</b> (not Install), then <b>Add</b>.</li>
+</ol>
+<p>The shortcut opens Diamond DJ and works the same way, offline too.</p></section>
+
+<section id="get-team"><h3>How do I get my team's roster and songs?</h3>
+<p>Your organizer shares the team's Google Drive folder with your Google account. Then, on wifi:</p>
+<ol>
+<li><b>Settings</b> › <b>Google Drive</b> › <b>Download from Google Drive</b> (later it says <b>Check for updates</b>).</li>
+<li>Sign in with the Google account the folder was shared with. Google brings you back to the app.</li>
+<li>Tick the team (or teams) you run on this device and tap <b>Download now</b>.</li>
+<li>Keep the app open until it says <b>Up to date</b>.</li>
+</ol>
+<p class="hint">Only new or changed songs are downloaded next time, so updates are quick.</p></section>
+
+<section id="screens"><h3>What are the screens for?</h3>
+<table>
+<tr><th colspan="2">In game (gold)</th></tr>
+<tr><td><b>Game</b></td><td>Up next, Play walkup, the batting order, key moments and breaks.</td></tr>
+<tr><td><b>Lineup</b></td><td>Saved batting orders: reorder, bench, pick which one the game uses.</td></tr>
+<tr><th colspan="2">Pre-game setup</th></tr>
+<tr><td><b>Roster</b></td><td>Players, their number, announcement and walk-up song.</td></tr>
+<tr><td><b>Songs</b></td><td>Every song on the device, with where it starts and stops.</td></tr>
+<tr><td><b>Moments</b></td><td>The key moment and break buttons on the Game screen, and their songs.</td></tr>
+</table>
+<p class="hint">The <b>?</b> at the top opens Help; the gear opens Settings.</p></section>
+
+<h2>Game day</h2>
+
+<section id="checklist"><h3>What should I do before the game?</h3>
+<ol>
+<li>At home on wifi: <b>Settings › Check for updates</b>.</li>
+<li>Charge the tablet. Turn on <b>Do not disturb</b> so notifications don't play through the speaker.</li>
+<li>At the field: connect the speaker (Bluetooth or cable) first, then open Diamond DJ from its icon.</li>
+<li>On <b>Game</b>, check the lineup at the top is today's. Tap <b>New game</b> twice.</li>
+<li>Tap <b>Lock</b>.</li>
+</ol></section>
+
+<section id="walkup"><h3>How do I play a walk-up?</h3>
+<p>The big card at the top of <b>Game</b> shows who is <b>Up next</b>. When they walk to the plate, tap <b>Play walkup</b>: their announcement plays, then their song. The song stops by itself at its stop point (or after the walk-up length in Settings) with a fade.</p>
+<p>The order moves on to the next batter by itself and goes back to the top after the last one. <b>Skip</b> passes over the batter up next without playing anything.</p></section>
+
+<section id="out-of-order"><h3>A batter comes up out of order.</h3>
+<ul>
+<li><b>Tap</b> any batter in the list to play their walk-up now. The order carries on from them.</li>
+<li><b>Press and hold</b> a batter to make them up next without playing anything.</li>
+</ul></section>
+
+<section id="change-order"><h3>How do I change the order during a game?</h3>
+<p>On <b>Game</b>, tap <b>Edit order</b>. Drag a batter by the handle (or use the arrows) to move them, <b>Bench</b> to take them out, and <b>Add back</b> to bring them back. It saves as you go; tap <b>Done</b>.</p>
+<p class="hint">This changes the lineup the game is using. The same lineup is on the Lineup screen.</p></section>
+
+<section id="new-game"><h3>What do New game and Start from batter 1 do?</h3>
+<p><b>New game</b> (tap it twice) goes back to batter 1 and lets every key moment song play again. Use it at the start of each game.</p>
+<p><b>Start from batter 1</b> only moves Up next back to the top of the order.</p></section>
+
+<section id="moments"><h3>How do key moments and breaks work?</h3>
+<p>Under the walk-ups are two sets of buttons: <b>Key moments</b> (Home Run, Strikeout, Great Play…) and <b>Warmups &amp; breaks</b> (Pitcher Warmup, Between Innings, Pregame, O Canada…). Tap one to play it; tap it again to fade it out. A new sound fades out whatever was playing.</p>
+<p>Each button does one of three things, set by the organizer:</p>
+<ul>
+<li><b>A random song</b>, skipping songs already played this game.</li>
+<li><b>The next song in order</b>.</li>
+<li><b>A playlist</b> that keeps going, with songs overlapping. Tap it again to skip to the next song.</li>
+</ul>
+<p>Short clips (under 5 seconds), like a foul-ball horn, play <b>over</b> the music instead of fading it.</p>
+<p class="hint">A dimmed button has no songs yet. Add them on the Moments screen.</p></section>
+
+<section id="fade-stop"><h3>Fade out, Stop and Volume</h3>
+<p>The bar at the bottom shows what's playing. <b>Fade out</b> fades everything (use it when play starts). <b>Stop</b> cuts everything at once. <b>Volume</b> is the app's own level; the tablet's volume buttons and the speaker matter too.</p></section>
+
+<section id="lock"><h3>How does Lock work?</h3>
+<p><b>Lock</b> hides Roster, Songs, Moments and Settings so nobody changes the setup by accident. Game, Lineup and Help stay open.</p>
+<p>To unlock, <b>press and hold</b> the lock button for a second and a half until it fills up.</p></section>
+
+<section id="phone"><h3>Using it on a phone</h3>
+<p>On a phone the Game screen has three tabs: <b>Walkups</b>, <b>Moments</b> and <b>Breaks</b>. It shows the next three batters; tap <b>Show all batters</b> for the whole order, Start from batter 1 and New game. Roster, Songs and Moments show a list first: tap an item to open it, and <b>‹ Back</b> to return.</p></section>
+
+<h2>Lineups</h2>
+
+<section id="lineups"><h3>How do saved lineups work?</h3>
+<p>A team can keep several lineups (say, one for a doubleheader or a tournament). Each keeps its own order and bench.</p>
+<ul>
+<li><b>Lineup</b> screen › <b>+ New</b>, <b>Duplicate</b>, <b>Rename</b> or <b>Delete</b> (on a phone, these are under <b>⋯</b>).</li>
+<li><b>Use for the game</b> makes it the one the Game screen plays. You can also pick it from the menu at the top of Game.</li>
+<li>Drag the handle (or use the arrows) to reorder.</li>
+<li>A new player on the roster joins the end of every lineup.</li>
+</ul></section>
+
+<section id="bench"><h3>How do I bench a player for one game?</h3>
+<p>Tap <b>Bench</b> next to them (on Lineup, or Game › Edit order). They move to the bench and are skipped. Tap their name on the bench (it says <b>Add back</b>) when they're back. A player marked not <b>Active player</b> in Roster sits on every bench.</p></section>
+
+<h2>Setting up a team</h2>
+
+<section id="add-player"><h3>How do I add or change a player?<span class="who">Unlocked</span></h3>
+<p><b>Roster</b> › <b>+ Add player</b>. Type the <b>First name</b>, <b>Last name</b> and <b>Number</b>; it saves as you type. Untick <b>Active player</b> for someone who's away for a while. <b>Remove from team</b> takes them off the roster and every lineup.</p></section>
+
+<section id="announcement"><h3>How do I add a player's announcement?</h3>
+<p>An announcement is a short audio clip, like “Now batting for the Bees… number seven… Jensyn Hiemstra!”. In <b>Roster</b>, tap the player, then <b>1 · Announcement</b> › <b>Choose a clip</b> and pick the MP3 (M4A and WAV work too). <b>Listen</b> plays it.</p>
+<p class="hint">Organizers: see <a href="#make-announcements">How do I make announcement clips?</a></p></section>
+
+<section id="walkup-song"><h3>How do I give a player a walk-up song?</h3>
+<p>In <b>Roster</b>, tap the player, then <b>2 · Walk-up song</b> › <b>Choose a song</b> and pick it from the songs on this device (add songs first in <b>Songs</b>). <b>Edit start and stop</b> jumps to that song's clip. <b>Test walkup</b> plays the whole thing, announcement and song, the way it sounds in a game.</p></section>
+
+<section id="under-after"><h3>Under the announcement, or after it?</h3>
+<p><b>Song comes in</b>:</p>
+<ul>
+<li><b>Under the announcement</b>: the song starts quietly under the announcement, then rises when it ends. Sounds like a big-league stadium.</li>
+<li><b>After it</b>: the song starts when the announcement ends.</li>
+</ul>
+<p class="hint">How quiet, and how fast it rises: Settings › Playback.</p></section>
+
+<section id="ready"><h3>What do Ready, No announcement and Not ready mean?</h3>
+<table>
+<tr><td><b>Ready</b></td><td>Announcement and song are both on this device.</td></tr>
+<tr><td><b>No announcement</b></td><td>The song plays, with no announcement first.</td></tr>
+<tr><td><b>No song</b></td><td>The announcement plays on its own.</td></tr>
+<tr><td><b>Not ready</b></td><td>Nothing to play on this device yet. Tap Check for updates on wifi, or add the files in Roster.</td></tr>
+</table></section>
+
+<section id="add-songs"><h3>How do I add songs?</h3>
+<p><b>Songs</b> › <b>+ Add songs from this device</b> and pick MP3 files (you can pick several at once). They're saved in the app, so the original files can be moved or deleted afterwards. Type in the search box to find one.</p>
+<p>Tap a song to change its <b>Title</b> or <b>Artist</b>, <b>Choose a different file</b>, <b>+ Add to a moment</b>, or <b>Delete song</b>.</p></section>
+
+<section id="start-stop"><h3>How do I make a song start at the good part?</h3>
+<ol>
+<li>In <b>Songs</b>, tap the song. The waveform shows its loud and quiet parts.</li>
+<li>Tap <b>Play</b>, or tap the waveform to jump around.</li>
+<li>At the catchy part, tap <b>Set start here</b>. Where it should end, tap <b>Set stop here</b>.</li>
+<li><b>Hear the clip</b> plays from start to stop, with the fade.</li>
+</ol>
+<p>For exact times, type seconds in <b>Start</b>, <b>Stop</b> and <b>Fade out</b>. <b>Volume (%)</b> turns a loud or quiet song down or up. A walk-up with no stop point plays for the walk-up length in Settings.</p></section>
+
+<section id="edit-moments"><h3>How do I make or change a key moment?</h3>
+<ol>
+<li><b>Moments</b> › <b>+ New moment</b>, or tap one to change it.</li>
+<li>Set the <b>Button name</b>, <b>Button colour</b> and where it <b>Shows under</b>: <b>Key moments</b> or <b>Warmups &amp; breaks</b>.</li>
+<li><b>When tapped, play</b>: a random song, the next song in order, or a playlist. Tick <b>Skip songs already played this game</b> for random.</li>
+<li><b>+ Add songs from the library</b>. Use the arrows to set the order.</li>
+</ol>
+<p><b>Move earlier</b> and <b>Move later</b> change where the button sits on Game. <b>Delete this moment</b> removes the button (the songs stay). New teams start with the usual moments, empty.</p></section>
+
+<section id="teams"><h3>How do I switch teams or add one?</h3>
+<p>Tap the team name at the top left. Pick a team to use it, <b>+ New team</b> to start one, or <b>Remove</b> to take a team off this device (it stays in Google Drive). Each team has its own roster, lineups, moments and game; songs are shared.</p>
+<p>The short name (at the top of the screen) is in <b>Settings › Team</b>.</p></section>
+
+<section id="settings"><h3>What do the Settings do?</h3>
+<table>
+<tr><td><b>Google Drive</b></td><td>Check for updates; Publish (organizers).</td></tr>
+<tr><td><b>Team</b></td><td>Team name and short name.</td></tr>
+<tr><td><b>Fade-out length</b></td><td>How long Fade out, and a new sound replacing an old one, take.</td></tr>
+<tr><td><b>Walk-up length</b></td><td>How long a walk-up plays when its song has no stop point.</td></tr>
+<tr><td><b>Song volume under the announcement</b></td><td>How quiet the song is while the announcement plays.</td></tr>
+<tr><td><b>Song comes up after the announcement over</b></td><td>How fast it rises afterwards.</td></tr>
+<tr><td><b>Playlist songs overlap by</b></td><td>The crossfade between playlist songs.</td></tr>
+<tr><td><b>Back up</b></td><td>Save or open a backup file.</td></tr>
+<tr><td><b>Try it out</b></td><td>A demo team with test tones.</td></tr>
+<tr><td><b>This device</b></td><td>Install Diamond DJ, storage used, version, and Help and what's new.</td></tr>
+</table></section>
+
+<h2>Google Drive</h2>
+
+<section id="updates"><h3>What does Check for updates do?</h3>
+<p>It looks in the team's Google Drive folder for the organizer's latest roster, lineups, moments, songs and announcements, and shows what it would download before it does. Only new or changed files are downloaded. Do it at home on wifi before game day.</p></section>
+
+<section id="my-changes"><h3>Will an update undo changes I made?</h3>
+<p><b>Lineups</b> you changed on this device are kept: an update never replaces them unless the organizer's version is newer than your change.</p>
+<p>If you changed the <b>roster or moments</b> on this device, Check for updates warns you first. Tick <b>Keep this device's roster and moments</b> to keep yours, or leave it unticked to take the organizer's.</p></section>
+
+<section id="not-verified"><h3>Google says “Google hasn't verified this app”.</h3>
+<p>That's expected while Diamond DJ is in testing. Tap <b>Continue</b>. If Google says you don't have access, ask the organizer to add your Google account (see <a href="#add-volunteer">How do I add a volunteer?</a>).</p></section>
+
+<h2>For organizers</h2>
+
+<section id="publish"><h3>How do I send changes to everyone?<span class="who">Organizers</span></h3>
+<ol>
+<li>Make the changes on your device (Roster, Songs, Moments, Lineup).</li>
+<li><b>Settings › Google Drive › Publish to Drive</b>. It appears for Google accounts with <b>Editor</b> access to the folder.</li>
+<li>Check the list of what will be sent (new songs, announcement clips, the team file), then tap <b>Publish</b>.</li>
+</ol>
+<p>Volunteers get it the next time they tap <b>Check for updates</b>. Nothing in Drive is deleted, the team file is only replaced after every file uploads, and Drive keeps earlier versions in its version history.</p>
+<p class="hint">“This Google account can view the team folder but not change it” means the account is a Viewer. Share the folder with it as Editor.</p></section>
+
+<section id="add-volunteer"><h3>How do I add a volunteer?<span class="who">Organizers</span></h3>
+<ol>
+<li>In Google Drive, share the <b>Diamond DJ</b> folder with their Google account: <b>Viewer</b> to download, <b>Editor</b> to publish.</li>
+<li>While the app is in testing, add them in Google Cloud too: <b>console.cloud.google.com</b> › Diamond DJ project › <b>Google Auth Platform</b> › <b>Audience</b> › <b>Test users</b> › <b>Add users</b>. (Up to 100.)</li>
+<li>Send them the web address and this guide.</li>
+</ol></section>
+
+<section id="drive-folder"><h3>What's in the Google Drive folder?<span class="who">Organizers</span></h3>
+<pre>Diamond DJ/
+├── library.diamond.json      every song's name and cut points
+├── Shared Songs/             each song once, whichever teams use it
+└── U13 Bees/                 one folder per team
+    ├── U13-Bees.diamond.json roster, moments, lineups
+    └── Announcements/        one clip per player</pre>
+<p>Let the app manage these files: add songs and clips in the app, then Publish. A new team's folder is made by its first Publish.</p></section>
+
+<section id="make-announcements"><h3>How do I make announcement clips?<span class="who">Organizers</span></h3>
+<p>Any MP3 works: record one on a phone, or make one with a text-to-speech service such as ElevenLabs (a stadium announcer voice, with a little echo). Keep the same wording for everyone, for example “Now batting for the Bees… number seven… Jensyn Hiemstra!”, and keep it under about 8 seconds.</p>
+<p>Name each file after the player (for example <b>#7 - Jensyn Hiemstra.mp3</b>), add it in <b>Roster › Choose a clip</b>, check it with <b>Test walkup</b>, then Publish.</p></section>
+
+<section id="backup"><h3>How do I back up a team?<span class="who">Organizers</span></h3>
+<p><b>Settings › Back up › Save a backup file</b> saves the roster, lineups, song names and cut points in a small file. The music isn't in it: Google Drive keeps that. <b>Open a backup file</b> brings a team back.</p></section>
+
+<h2>Problems</h2>
+
+<section id="nothing-plays"><h3>Nothing plays.</h3>
+<ul>
+<li>Check the tablet's volume, the <b>Volume</b> slider at the bottom of the app, and the speaker.</li>
+<li>Bluetooth: connect the speaker before opening the app. If it was connected after, close the app and open it again.</li>
+<li>A batter marked <b>Not ready</b>, or a song marked <b>File not on this device</b>, isn't downloaded yet: <b>Settings › Check for updates</b> on wifi.</li>
+</ul></section>
+
+<section id="delay"><h3>The sound is a little late on the speaker.</h3>
+<p>Bluetooth always adds a short delay. Tap a moment as soon as it happens. A cable to the sound system has no delay.</p></section>
+
+<section id="screen-off"><h3>The screen turns off during the game.</h3>
+<p>Diamond DJ keeps the screen on while it's open, where the device allows it. If it still turns off: <b>Android:</b> Settings › Display › Screen timeout › the longest time. <b>iPad / iPhone:</b> Settings › Display &amp; Brightness › Auto-Lock › Never.</p></section>
+
+<section id="space"><h3>The device is running out of space.</h3>
+<p><b>Settings › This device</b> shows how much the app uses. Remove teams you don't run (team button › Remove) and songs nobody uses (Songs › the song › Delete song).</p></section>
+
+<section id="new-version"><h3>It says “A new version of Diamond DJ is ready”.</h3>
+<p>A new version downloaded in the background. Tap <b>See what's new</b> to read what changed, then <b>Update now</b> when nothing is playing. Your teams, lineups and songs stay. <b>Later</b> keeps the current version until the app is next opened.</p>
+<p class="hint">The message waits until nothing is playing. Small fixes install by themselves with no message; the screen may blink for a second.</p></section>
+
+<section id="version"><h3>Which version do I have, and what changed?</h3>
+<p>Tap the <b>?</b> at the top. The version is the first line of Help. <b>What's new</b> lists the latest updates, and <b>App history</b> lists every one. When asking the organizer for help, send them that version line and what happened.</p></section>
+
+</main>
+<footer class="wrap">Diamond DJ · for the Burlington Bees and their volunteers.</footer>
+</body>
+</html>

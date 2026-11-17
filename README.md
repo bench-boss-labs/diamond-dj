@@ -6,7 +6,7 @@ screen, and plays everything from the device, so no wifi is needed at the field.
 
 First team: U13 Burlington Bees. Design spec and mockups live in the claude.ai project "Diamond DJ".
 
-## What it does (version 0.4)
+## What it does (version 0.5)
 
 - **Game**: big "Up next" card with **Play walkup** (announcement, then the song) and **Skip**;
   the batting order auto-advances and wraps. Tap any batter to play them; press and hold to make
@@ -37,7 +37,17 @@ First team: U13 Burlington Bees. Design spec and mockups live in the claude.ai p
 - **Google Drive** (Settings): volunteers sign in with Google and tap **Check for updates** to get
   the teams they run, downloading only new or changed songs. Organizers (Editor access) get
   **Publish to Drive**. Lineups changed on a device are never overwritten by an update.
+- **Help** (the ? at the top, open even when locked): game-day checklist, common questions, a
+  section for organizers, **What's new** and **App history**, and a link to the **full guide**
+  (`guide/`, a separate page that also works offline).
+- **Install** (Settings › This device): one tap where Chrome offers it, otherwise the steps for
+  that device (Android, Samsung Internet, iPad/iPhone, computer).
+- **New versions**: "A new version is ready" with what's in it, Update now and Later, shown only
+  when nothing is playing. Quiet releases switch over by themselves. Once after an update:
+  "Diamond DJ updated to x.y.z · See what's new".
 - Offline install (service worker), screen kept awake during play where supported.
+
+**Full guide:** https://scalisec.github.io/diamond-dj/guide/
 
 ## Google Drive
 
@@ -80,8 +90,16 @@ chime announcements).
 
 ## Hosting
 
-GitHub Pages: Settings > Pages > Deploy from a branch > `main` / root. Bump `VERSION` in `sw.js`
-and `APP_VERSION` in `version.js` for every release so tablets pick up the change.
+GitHub Pages: Settings > Pages > Deploy from a branch > `main` / root.
+
+## Releasing a version
+
+1. Add the version at the top of `release-notes.json` (newest first), with `new`, `improved` or
+   `fixed` notes written for volunteers. Mark small behind-the-scenes fixes `"quiet": true`.
+2. `python3 tools/release.py` writes `version.js` (version, build time, notes) and moves `sw.js`
+   to a new `VERSION`, so every device downloads the new copy.
+3. Update Help (`openHelp` in `js/app.js`) and `guide/index.html` if what volunteers do changed.
+4. Run the tests, commit, push, and keep a `release-x.y.z` branch as a restore point.
 
 ## Tests
 
@@ -89,6 +107,7 @@ and `APP_VERSION` in `version.js` for every release so tablets pick up the chang
 node --test tests/model.test.js     # batting order, lineups, roster sync, walk-up plan
 python3 tests/smoke.py [outdir]     # headless Chromium walk-through of the main flows (needs Playwright)
 python3 tests/drive_test.py [outdir] # two devices against a stand-in for Google Drive (tests/fake_drive.py)
+python3 tests/help_test.py [outdir]  # Help, install, new-version banner, quiet release, guide offline
 ```
 
 ## Code
@@ -104,4 +123,6 @@ Plain HTML, CSS and JavaScript, no libraries.
 | `js/app.js` | The screens, in sections marked with `====` banners |
 | `app.css` | Bees navy and gold, light background for sun |
 | `sw.js`, `manifest.webmanifest`, `icons/` | Offline install |
+| `release-notes.json`, `version.js`, `tools/release.py` | What's new in each version, and the build stamp shown in Help |
+| `guide/` | The full guide page |
 | `demo/` | Demo team and generated test audio |
