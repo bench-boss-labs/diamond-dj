@@ -7,7 +7,7 @@
      itself when nothing is playing).
    - The full guide (guide/) is saved too, so it opens at the field without wifi.
    VERSION is set by tools/release.py. */
-const VERSION = 'diamond-v10';
+const VERSION = 'diamond-v11';
 const SHELL = ['./', 'index.html', 'app.css', 'version.js', 'release-notes.json', 'manifest.webmanifest', 'guide/',
   'js/model.js', 'js/store.js', 'js/audio.js', 'js/drive.js', 'js/app.js',
   'icons/logo.png', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png',

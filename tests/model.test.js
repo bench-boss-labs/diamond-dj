@@ -176,22 +176,26 @@ function libWith(n) {
   return lib;
 }
 
-test('a new team starts with the pre-made moments and breaks, all empty', () => {
-  const t = M.newTeam('Bees');
-  assert.deepEqual(t.moments.filter(m => m.section === 'moments').map(m => m.name),
+test('the common library starts with the pre-made moments and breaks, all empty; a new team has none of its own', () => {
+  const lib = M.newLibrary();
+  assert.deepEqual(lib.moments.filter(m => m.section === 'moments').map(m => m.name),
     ['Home Run', 'Strikeout', 'Great Play', 'Walk', 'Rally Time', 'Double Play', 'Foul Ball', 'We Win!']);
-  assert.deepEqual(t.moments.filter(m => m.section === 'breaks').map(m => m.name), ['Pitcher Warmup', 'Between Innings', 'Pregame', 'O Canada']);
-  assert.ok(t.moments.every(m => m.songIds.length === 0));
-  assert.equal(M.findMoment(t, t.moments[0].id).name, 'Home Run');
+  assert.deepEqual(lib.moments.filter(m => m.section === 'breaks').map(m => m.name), ['Pitcher Warmup', 'Between Innings', 'Pregame', 'O Canada']);
+  assert.ok(lib.moments.every(m => m.songIds.length === 0));
+  const t = M.newTeam('Bees');
+  assert.deepEqual([t.moments, t.songs, t.hidden, t.extra], [[], [], [], {}]);
+  assert.equal(M.gameMoments(lib, t)[0].name, 'Home Run');
 });
 
-test('a Phase 1 team gets the pre-made moments once; a team that deleted them all stays empty', () => {
+test('older files: a team gets team songs and settings, a library gets the common moments once', () => {
   const old = JSON.parse(JSON.stringify(teamWith(2)));
-  old.version = 1; old.moments = [];
-  assert.equal(M.checkTeam(old).moments.length, 12);
-  const cleared = JSON.parse(JSON.stringify(teamWith(2)));
-  cleared.moments = [];
-  assert.equal(M.checkTeam(cleared).moments.length, 0);
+  old.version = 2; delete old.songs; delete old.hidden; delete old.extra;
+  const t = M.checkTeam(old);
+  assert.deepEqual([t.version, t.songs, t.hidden, t.extra], [3, [], [], {}]);
+  assert.equal(t.moments.length, old.moments.length); // its moments stay, as team moments
+  const lib = M.checkLibrary({ format: 'diamond-library', version: 1, songs: [] });
+  assert.equal(lib.moments.length, 12);
+  assert.equal(M.checkLibrary({ format: 'diamond-library', version: 2, songs: [], moments: [] }).moments.length, 0);
 });
 
 test('random picks skip songs already played this game, then start over', () => {
@@ -221,14 +225,16 @@ test('moments ignore songs that were deleted; an empty moment picks nothing', ()
   assert.equal(M.pickSong(M.newMoment({ songIds: ['gone', 's1'] }), lib, {}, () => 0.99).songId, 's1');
 });
 
-test('deleting a song removes it from players and moments', () => {
+test('deleting a song removes it from players, moments and team songs added to common moments', () => {
   const t = teamWith(1);
   t.players[0].songId = 's1';
-  t.moments[0].songIds = ['s1', 's2'];
+  t.moments = [M.newMoment({ name: 'Mine', songIds: ['s1', 's2'] })];
+  t.extra = { m_common: ['s1', 's3'] };
   assert.equal(M.momentsWithSong(t, 's1').length, 1);
   M.removeSongEverywhere(t, 's1');
   assert.equal(t.players[0].songId, null);
   assert.deepEqual(t.moments[0].songIds, ['s2']);
+  assert.deepEqual(t.extra.m_common, ['s3']);
 });
 
 test('a moment plays its clip: start to stop, or to the end of the song', () => {
@@ -306,20 +312,40 @@ test('library: Drive wins for the same song, this device’s own songs stay', ()
   assert.equal(M.findSong(M.mergeLibrary(local, remote, { keepLocal: true }), 's1').start, 5);
 });
 
-test('publishing one team keeps the other teams’ songs in Drive’s library', () => {
-  const remote = libWith(3); // s1..s3, used by other teams
-  const local = libWith(2); local.songs[1].start = 9; local.songs.push({ ...M.songFromFile('Songs/New.mp3'), id: 'new' });
-  const out = M.libraryForPublish(remote, local, new Set(['s2', 'new']));
-  assert.deepEqual(out.songs.map(s => s.id).sort(), ['new', 's1', 's2', 's3']);
-  assert.equal(M.findSong(out, 's2').start, 9);
+test('the Game screen: common moments the team shows, with its own songs added, then team moments', () => {
+  const lib = M.newLibrary();
+  const [home, strike] = lib.moments;
+  home.songIds = ['c1'];
+  const t = M.newTeam('Bees');
+  t.hidden = [strike.id];
+  t.extra = { [home.id]: ['t1'] };
+  t.moments = [M.newMoment({ name: 'Maddie #5 Pitching', section: 'breaks', songIds: ['t2'] })];
+  const g = M.gameMoments(lib, t);
+  assert.equal(g.find(m => m.id === home.id).songIds.join(), 'c1,t1');
+  assert.equal(home.songIds.join(), 'c1'); // the library itself is untouched
+  assert.ok(!g.some(m => m.id === strike.id));
+  assert.equal(g[g.length - 1].name, 'Maddie #5 Pitching');
+  assert.equal(g[g.length - 1].common, false);
+  t.songs = [{ ...M.songFromFile('Teams/x/Oklahoma.mp3'), id: 't2' }];
+  lib.songs = [{ ...M.songFromFile('Songs/C.mp3'), id: 'c1' }];
+  const pool = M.poolFor(lib, t);
+  assert.ok(M.findSong(pool, 't2') && M.findSong(pool, 'c1'));
+  assert.deepEqual(M.commonSongsMissing(t, lib, { songs: [] }).map(s => s.id), ['c1']);
+  assert.deepEqual(M.commonSongsMissing(t, lib, lib), []);
 });
 
 test('songs a team uses, and where files live in Drive', () => {
   const t = teamWith(1);
   t.players[0].songId = 'a';
-  t.moments[0].songIds = ['b', 'a'];
-  assert.deepEqual([...M.teamSongIds(t)].sort(), ['a', 'b']);
-  assert.equal(M.drivePathFor('Songs/X - Y.mp3', 'U13 Bees'), 'Shared Songs/X - Y.mp3');
+  t.moments = [M.newMoment({ songIds: ['b', 'a'] })];
+  t.extra = { x: ['c'] };
+  assert.deepEqual([...M.teamSongIds(t)].sort(), ['a', 'b', 'c']);
+  const lib = M.newLibrary(); lib.moments[0].songIds = ['d'];
+  assert.deepEqual([...M.teamSongIds(t, lib)].sort(), ['a', 'b', 'c', 'd']);
+  t.hidden = [lib.moments[0].id];
+  assert.ok(!M.teamSongIds(t, lib).has('d'));
+  assert.equal(M.drivePathFor('Songs/X - Y.mp3', 'U13 Bees'), 'Common Songs/X - Y.mp3');
+  assert.equal(M.drivePathFor('Teams/t_1/Oklahoma.mp3', 'U13 Bees'), 'U13 Bees/Team Songs/Oklahoma.mp3');
   assert.equal(M.drivePathFor('Announcements/p_1-ava.mp3', 'U13 Bees'), 'U13 Bees/Announcements/p_1-ava.mp3');
 });
 

@@ -3,7 +3,8 @@
 Only what Diamond DJ uses: sign-in redirect, files.get (metadata and alt=media), files.list by
 parent, about, folder create, resumable upload, media update. Everything lives in memory.
 The next sign-in uses the account set with  GET /_account?name=organizer|volunteer.
-Organizer can edit the folder; volunteer can only view it.
+organizer (Diamond DJ Admin) can edit everything; coach (a team organizer) can edit inside team
+folders but not the Diamond DJ folder itself, Common Songs or the library file; volunteer can only view.
 """
 import hashlib, itertools, json, re, threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -38,6 +39,18 @@ class FakeDrive:
             m['md5Checksum'] = hashlib.md5(f['data']).hexdigest()
         m['capabilities'] = {'canAddChildren': editor}
         return m
+
+    def top(self, f):
+        # the folder right under ROOTFOLDER01 that holds f (None for the root itself)
+        while f['parents'] and f['parents'][0] != 'ROOTFOLDER01':
+            f = self.files[f['parents'][0]]
+        return f if f['parents'] else None
+
+    def can_edit(self, acct, fid):
+        if acct == 'organizer': return True
+        if acct != 'coach' or fid not in self.files: return False
+        t = self.top(self.files[fid])
+        return bool(t) and t['mimeType'] == FOLDER and t['name'] != 'Common Songs'
 
     def children(self, parent):
         return [f for f in self.files.values() if parent in f['parents']]
@@ -108,27 +121,26 @@ def make_handler(drive):
             acct = self.who()
             if not acct:
                 return self.reply(401, {'error': {'status': 'UNAUTHENTICATED'}})
-            editor = acct == 'organizer'
             if u.path == '/drive/v3/about':
                 return self.reply(200, {'user': {'emailAddress': acct + '@example.com'}})
             if u.path == '/drive/v3/files':
                 m = re.match(r"'([\w-]+)' in parents", q.get('q', ''))
                 files = drive.children(m.group(1)) if m else []
-                return self.reply(200, {'files': [drive.meta(f, editor) for f in files]})
+                return self.reply(200, {'files': [drive.meta(f, drive.can_edit(acct, f['id'])) for f in files]})
             m = re.match(r'/drive/v3/files/([\w-]+)$', u.path)
             if m and m.group(1) in drive.files:
                 f = drive.files[m.group(1)]
                 if q.get('alt') == 'media':
                     return self.reply(200, f['data'], 'application/octet-stream')
-                return self.reply(200, drive.meta(f, editor))
+                return self.reply(200, drive.meta(f, drive.can_edit(acct, f['id'])))
             return self.reply(404, {'error': {'status': 'NOT_FOUND'}})
 
-        def write_allowed(self):
+        def write_allowed(self, target=None):
             acct = self.who()
             if not acct:
                 self.reply(401, {'error': {'status': 'UNAUTHENTICATED'}})
                 return False
-            if acct != 'organizer':
+            if not (acct == 'organizer' or (target and drive.can_edit(acct, target))):
                 self.reply(403, {'error': {'errors': [{'reason': 'insufficientFilePermissions'}]}})
                 return False
             return True
@@ -136,9 +148,9 @@ def make_handler(drive):
         def do_POST(self):
             u = urlparse(self.path)
             q = {k: v[0] for k, v in parse_qs(u.query).items()}
-            if not self.write_allowed():
-                return
             meta = json.loads(self.body() or b'{}')
+            if not self.write_allowed((meta.get('parents') or [None])[0]):
+                return
             if u.path == '/drive/v3/files':
                 f = drive.add('F%d' % next(drive.ids), meta['name'], meta.get('mimeType', 'application/octet-stream'), meta['parents'][0])
                 return self.reply(200, drive.meta(f, True))
@@ -151,7 +163,7 @@ def make_handler(drive):
 
         def do_PUT(self):
             m = re.match(r'/upload/session/(\w+)$', urlparse(self.path).path)
-            if not self.write_allowed() or not m:
+            if not m or not self.write_allowed(drive.sessions[m.group(1)][0]['parents'][0]):
                 return
             meta, mime = drive.sessions.pop(m.group(1))
             f = drive.add('F%d' % next(drive.ids), meta['name'], mime, meta['parents'][0], self.body())
@@ -159,7 +171,7 @@ def make_handler(drive):
 
         def do_PATCH(self):
             m = re.match(r'/upload/drive/v3/files/([\w-]+)$', urlparse(self.path).path)
-            if not self.write_allowed() or not m or m.group(1) not in drive.files:
+            if not m or m.group(1) not in drive.files or not self.write_allowed(m.group(1)):
                 return
             f = drive.files[m.group(1)]
             f['data'] = self.body()

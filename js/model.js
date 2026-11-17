@@ -1,11 +1,18 @@
 /* Diamond DJ: the data model and the rules that don't touch the screen or the speakers.
  * Pure functions only, so they run in the browser and in Node tests (tests/model.test.js).
  *
- * team    { format:'diamond-team', version, id, name, short, players[], lineups[], moments[] }
+ * Two kinds of songs and moments (version 0.6):
+ *   the common library, run by the Diamond DJ Admin, for every team:
+ *     library { format:'diamond-library', version:2, songs[] (common songs), moments[] (common moments) }
+ *   each team's own, run by its team organizers:
+ *     team { format:'diamond-team', version:3, id, name, short, players[], lineups[],
+ *            moments[] (team moments), songs[] (team songs), hidden:[common moment ids], extra:{ momentId: [songId] } }
  * player  { id, first, last, number, active, intro:{path}|null, songId|null, entry:'under'|'after' }
  * lineup  { id, name, order:[playerId], bench:[playerId], updated }
- * library { format:'diamond-library', version, songs[] }
  * song    { id, path, title, artist, length, start, stop, fadeOut, volume, categories[] }
+ * Paths on the device: common songs "Songs/<file>", team songs "Teams/<teamId>/<file>",
+ * announcements "Announcements/<file>". Functions that look songs up take a pool { songs[] }:
+ * the library, or poolFor(library, team) for the common songs plus that team's.
  */
 'use strict';
 
@@ -24,7 +31,7 @@
   /* ------------------------------------------------------------ teams and players */
 
   function newTeam(name, short) {
-    const team = { format: FORMAT_TEAM, version: 2, id: uid('t'), name, short: short || name, players: [], lineups: [], moments: defaultMoments() };
+    const team = { format: FORMAT_TEAM, version: 3, id: uid('t'), name, short: short || name, players: [], lineups: [], moments: [], songs: [], hidden: [], extra: {} };
     team.lineups.push(newLineup('Default'));
     return team;
   }
@@ -61,7 +68,20 @@
   function removeSongEverywhere(team, songId) {
     for (const p of team.players) if (p.songId === songId) p.songId = null;
     for (const m of team.moments) m.songIds = m.songIds.filter(id => id !== songId);
+    for (const k of Object.keys(team.extra || {})) team.extra[k] = team.extra[k].filter(id => id !== songId);
   }
+
+  /* The moments a team's Game screen shows: the common ones it hasn't hidden (with the team's
+     own songs added to them), then the team's own. Copies, marked common:true or false. */
+  function gameMoments(library, team) {
+    const hidden = new Set(team.hidden || []);
+    const common = (library.moments || []).filter(m => !hidden.has(m.id))
+      .map(m => ({ ...m, songIds: [...m.songIds, ...((team.extra || {})[m.id] || [])], common: true }));
+    return common.concat(team.moments.map(m => ({ ...m, common: false })));
+  }
+
+  /* The songs a team can use: the common library's and its own. */
+  function poolFor(library, team) { return { songs: (library.songs || []).concat((team && team.songs) || []) }; }
 
   function momentsWithSong(team, songId) { return team.moments.filter(m => m.songIds.includes(songId)); }
 
@@ -278,7 +298,7 @@
 
   /* ------------------------------------------------------------ library */
 
-  function newLibrary() { return { format: FORMAT_LIBRARY, version: 1, songs: [] }; }
+  function newLibrary() { return { format: FORMAT_LIBRARY, version: 2, songs: [], moments: defaultMoments() }; }
 
   function findSong(library, id) { return library.songs.find(s => s.id === id) || null; }
 
@@ -348,8 +368,11 @@
       throw new Error('This isn’t a Diamond DJ team file.');
     }
     obj.moments = Array.isArray(obj.moments) ? obj.moments.map(newMoment) : [];
-    // teams from version 1 (Phase 1) had no moments yet: give them the pre-made ones once
-    if (!(obj.version >= 2)) { if (!obj.moments.length) obj.moments = defaultMoments(); obj.version = 2; }
+    // version 3 (0.6): team songs, hidden common moments, team songs added to common moments
+    obj.songs = Array.isArray(obj.songs) ? obj.songs.filter(s => s && s.id && s.path).map(s => ({ ...songFromFile(s.path), ...s })) : [];
+    obj.hidden = Array.isArray(obj.hidden) ? obj.hidden.map(String) : [];
+    obj.extra = obj.extra && typeof obj.extra === 'object' ? Object.fromEntries(Object.entries(obj.extra).map(([k, v]) => [k, Array.isArray(v) ? v.map(String) : []])) : {};
+    obj.version = 3;
     obj.players = obj.players.map(p => ({ ...newPlayer(p), id: String(p.id || uid('p')) }));
     obj.lineups = obj.lineups.map(l => ({
       id: String(l.id || uid('l')), name: String(l.name || 'Lineup'),
@@ -366,6 +389,9 @@
       throw new Error('This isn’t a Diamond DJ song library.');
     }
     obj.songs = obj.songs.filter(s => s && s.id && s.path).map(s => ({ ...songFromFile(s.path), ...s }));
+    // version 1 had no common moments: start with the usual ones, empty
+    obj.moments = Array.isArray(obj.moments) ? obj.moments.map(newMoment) : defaultMoments();
+    obj.version = 2;
     return obj;
   }
 
@@ -374,7 +400,7 @@
   /* The part of a team the organizer publishes and an update replaces: name, roster, moments.
      Lineups are separate: they belong to whoever is running the game. */
   function setupOf(team) {
-    return { name: team.name, short: team.short, players: team.players, moments: team.moments };
+    return { name: team.name, short: team.short, players: team.players, moments: team.moments, songs: team.songs, hidden: team.hidden, extra: team.extra };
   }
   // a short fingerprint, to tell whether a device changed the setup since it last synced
   function fingerprint(obj) {
@@ -389,11 +415,13 @@
     return fingerprint(ids.map(id => findSong(library, id)).filter(Boolean));
   }
 
-  /* Every song a team uses: walk-ups and moments. */
-  function teamSongIds(team) {
+  /* Every song a team uses: walk-ups, its moments, and (given the library) the common moments it shows. */
+  function teamSongIds(team, library) {
     const ids = new Set();
     for (const p of team.players) if (p.songId) ids.add(p.songId);
-    for (const m of team.moments) for (const id of m.songIds) ids.add(id);
+    for (const m of library ? gameMoments(library, team) : team.moments) for (const id of m.songIds) ids.add(id);
+    for (const v of Object.values(team.extra || {})) for (const id of v) ids.add(id);
+    for (const s of team.songs || []) ids.add(s.id);
     return ids;
   }
 
@@ -426,24 +454,25 @@
     for (const s of remote.songs || []) byId.set(s.id, s);
     for (const s of local.songs || []) if (!byId.has(s.id) || keepLocal) byId.set(s.id, s);
     out.songs = [...byId.values()].map(s => ({ ...s }));
+    out.moments = JSON.parse(JSON.stringify(keepLocal || !Array.isArray(remote.moments) ? (local.moments || []) : remote.moments));
     return checkLibrary(out);
   }
 
-  /* Publishing one team: Drive's library keeps every other team's songs, and gets this team's. */
-  function libraryForPublish(remote, local, songIds) {
-    const out = newLibrary();
-    const byId = new Map((remote && remote.songs || []).map(s => [s.id, s]));
-    for (const id of songIds) { const s = findSong(local, id); if (s) byId.set(id, s); }
-    out.songs = [...byId.values()];
-    return out;
+  /* Common songs a team uses that the published library doesn't have yet. */
+  function commonSongsMissing(team, local, remote) {
+    const have = new Set((remote && remote.songs || []).map(s => s.id));
+    return [...teamSongIds(team, local)].map(id => findSong(local, id)).filter(s => s && !have.has(s.id));
   }
 
-  /* Where a file on this device lives in the Drive folder, and back. */
+  /* Where a file on this device lives in the Drive folder. */
   function drivePathFor(localPath, teamFolderName) {
-    if (localPath.startsWith('Songs/')) return 'Shared Songs/' + localPath.slice(6);
+    if (localPath.startsWith('Songs/')) return 'Common Songs/' + localPath.slice(6);
+    if (localPath.startsWith('Teams/')) return `${teamFolderName}/Team Songs/${localPath.split('/').slice(2).join('/')}`;
     if (localPath.startsWith('Announcements/')) return `${teamFolderName}/${localPath}`;
     return null;
   }
+  const fileName = path => path.split('/').pop();
+  const teamSongPath = (teamId, name) => `Teams/${teamId}/${name}`;
 
   const api = {
     uid, newTeam, newPlayer, playerName, byNumber, playerStatus, addPlayer, removePlayer,
@@ -453,7 +482,8 @@
     newLibrary, findSong, songFromFile, songLabel, songsUsing,
     walkupPlan, checkTeam, checkLibrary,
     COLORS, newMoment, defaultMoments, findMoment, removeSongEverywhere, momentsWithSong, pickSong, notePlayed, clipOf,
-    setupOf, fingerprint, setupPrint, libraryPrint, teamSongIds, mergeTeam, mergeLibrary, libraryForPublish, drivePathFor,
+    setupOf, fingerprint, setupPrint, libraryPrint, teamSongIds, mergeTeam, mergeLibrary, commonSongsMissing, drivePathFor,
+    gameMoments, poolFor, fileName, teamSongPath,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Model = api;

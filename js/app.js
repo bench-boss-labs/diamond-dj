@@ -27,6 +27,7 @@ const DEFAULTS = {
   layerSeconds: 5,     // clips shorter than this (sound effects) play over the music
   masterVolume: 1,
   locked: false,       // Lock: hides setup screens and settings on this device
+  viewAs: null,        // Diamond DJ Admin trying another role's screens: 'organizer' | 'volunteer'
 };
 
 let teams = {};          // every team on this device, by id
@@ -41,7 +42,11 @@ const stored = new Set(); // paths of audio files on this device
 
 const ui = { view: 'game', playerId: null, songId: null, lineupId: null, songQuery: '', gameTab: 'walkups', momentId: null,
   phoneDetail: false, showAllBatters: false };
-const SETUP_VIEWS = ['roster', 'songs', 'moments'];
+const TEAM_VIEWS = ['roster', 'songs', 'moments', 'teaminfo', 'publish'];   // the Team screen (team organizers)
+const ADMIN_VIEWS = ['csongs', 'cmoments', 'cpublish'];                         // the Admin screen (Diamond DJ Admin)
+const SETUP_VIEWS = TEAM_VIEWS.concat(ADMIN_VIEWS);
+// Songs and Moments show the team's own on the Team screen, the common library's on the Admin screen
+const commonScope = () => ADMIN_VIEWS.includes(ui.view);
 
 const timers = {};
 function later(key, fn, ms = 300) { clearTimeout(timers[key]); timers[key] = setTimeout(fn, ms); }
@@ -85,7 +90,32 @@ function lineup() {
   return l;
 }
 const player = id => team.players.find(p => p.id === id) || null;
-const song = id => (id ? Model.findSong(library, id) : null);
+const pool = () => Model.poolFor(library, team);   // the songs this team can use: common and its own
+const song = id => (id ? Model.findSong(pool(), id) : null);
+const songsHere = () => (commonScope() ? library.songs : team.songs);
+const momentsHere = () => (commonScope() ? library.moments : team.moments);
+function setMomentsHere(list) { if (commonScope()) library.moments = list; else team.moments = list; }
+const findHere = id => momentsHere().find(m => m.id === id) || null;
+const gameMoments = () => Model.gameMoments(library, team);
+const saveBoth = () => { saveLibrary(); saveTeam(); };
+
+/* Roles, from Google Drive sharing (read at Check for updates):
+   admin: can change the Diamond DJ folder · organizer: can change this team's folder · volunteer: can only view.
+   A device that has never checked Drive, and a team made on this device, can be set up here.
+   The Diamond DJ Admin can "view as" a team organizer or volunteer to try their screens. */
+const RANK = { volunteer: 0, organizer: 1, admin: 2 };
+function realRole(t = team) {
+  if (!Drive.state.lastCheck || Drive.state.editor) return 'admin';
+  if (!Drive.state.teams[t.id] || Drive.state.roles[t.id]) return 'organizer';
+  return 'volunteer';
+}
+function role(t = team) {
+  const r = realRole(t), v = settings.viewAs;
+  return v && RANK[v] < RANK[r] ? v : r;
+}
+const ROLE_NAME = { admin: 'Diamond DJ Admin', organizer: 'Team organizer', volunteer: 'Volunteer' };
+const canTeam = () => RANK[role()] >= 1;
+const canAdmin = () => role() === 'admin';
 
 /* ==================================================================== 2. HELPERS */
 
@@ -96,7 +126,7 @@ const main = $('#main');
 const phoneQuery = matchMedia('(max-width: 640px)');
 const phone = () => phoneQuery.matches;
 // on a phone, list screens (Roster, Songs, Moments) show the list, or one item full screen
-const BACK_LABEL = { roster: 'Roster', songs: 'Songs', moments: 'Moments' };
+const BACK_LABEL = { roster: 'Roster', songs: 'Team songs', moments: 'Team moments', csongs: 'Common songs', cmoments: 'Common moments' };
 function backBar(title) {
   return `<div class="phone-back"><button class="back-btn" data-act="phone-back">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>${BACK_LABEL[ui.view]}</button>
@@ -187,7 +217,7 @@ async function storeFile(path, blob) {
 }
 async function dropFileIfUnused(path) {
   if (!path) return;
-  const used = library.songs.some(s => s.path === path) || Object.values(teams).some(t => t.players.some(p => p.intro && p.intro.path === path));
+  const used = library.songs.some(s => s.path === path) || Object.values(teams).some(t => t.songs.some(s => s.path === path) || t.players.some(p => p.intro && p.intro.path === path));
   if (used) return;
   await Store.audio.remove(path).catch(() => {});
   stored.delete(path);
@@ -230,7 +260,7 @@ function walkupsHtml() {
   const l = lineup();
   if (!team.players.length) {
     return `<div class="empty"><p><b>No players yet.</b></p><p>Add the team in Roster, or try the app with the demo team.</p>
-      <div class="row" style="justify-content:center">${settings.locked ? '' : '<button class="btn primary" data-act="go" data-view="roster">Go to Roster</button><button class="btn" data-act="load-demo">Load the demo team</button>'}</div></div>`;
+      <div class="row" style="justify-content:center">${settings.locked || !canTeam() ? '' : '<button class="btn primary" data-act="go" data-view="roster">Set up the roster</button><button class="btn" data-act="load-demo">Load the demo team</button>'}</div></div>`;
   }
   const { first, tags } = batterTags(l);
   const p = player(first);
@@ -239,8 +269,8 @@ function walkupsHtml() {
 
   const card = p ? (() => {
     const s = song(p.songId);
-    const meta = s ? `${esc(Model.songLabel(s))} · ${Math.round(Model.walkupPlan(p, library, settings).song.stop - Model.walkupPlan(p, library, settings).song.start)} s clip` : '<span class="status no-song">No walk-up song</span>';
-    const status = Model.playerStatus(p, library);
+    const meta = s ? `${esc(Model.songLabel(s))} · ${Math.round(Model.walkupPlan(p, pool(), settings).song.stop - Model.walkupPlan(p, pool(), settings).song.start)} s clip` : '<span class="status no-song">No walk-up song</span>';
+    const status = Model.playerStatus(p, pool());
     return `<div class="upnext">
       <div class="who"><div class="big-num">${esc(p.number || '–')}</div>
         <div class="stack" style="gap:0">
@@ -261,7 +291,7 @@ function walkupsHtml() {
     const i = l.order.indexOf(id);
     const q = player(id);
     const s = song(q.songId);
-    const status = Model.playerStatus(q, library);
+    const status = Model.playerStatus(q, pool());
     const tag = id === playingId ? 'Playing' : (tags.get(id) || '');
     return `<button class="item ${id === first ? 'sel' : ''} ${id === playingId ? 'playing' : ''} ${status === 'not-ready' ? 'not-ready' : ''}" data-act="batter" data-id="${esc(id)}">
       <span class="slot">${i + 1}</span><span class="num">${esc(q.number || '–')}</span>
@@ -290,7 +320,7 @@ async function playBatter(id) {
   game.upNext = Model.nextAfter(l, id);
   game.lastPlayed = id;
   saveGame();
-  const plan = Model.walkupPlan(p, library, settings);
+  const plan = Model.walkupPlan(p, pool(), settings);
   if (!plan) { toast(`${Model.playerName(p)} has no song or announcement yet.`); render(); return; }
   const label = `#${p.number} ${Model.playerName(p)}`.replace(/^# /, '');
   render();
@@ -423,7 +453,7 @@ function deleteLineup() {
 function rosterList() {
   const players = [...team.players].sort(Model.byNumber);
   return players.map(p => {
-    const st = Model.playerStatus(p, library);
+    const st = Model.playerStatus(p, pool());
     return `<button class="item ${p.id === ui.playerId ? 'sel' : ''}" data-act="pick-player" data-id="${esc(p.id)}">
       <span class="num">${esc(p.number || '–')}</span>
       <span class="grow"><span class="name">${esc(Model.playerName(p))}</span>${p.active ? '' : '<span class="sub">Not active</span>'}</span>
@@ -460,10 +490,10 @@ function renderRoster() {
         </div>
         <div class="slotcard song ${s && !songOk ? 'missing' : ''}">
           <span class="k">2 · Walk-up song</span>
-          ${s ? `<span class="v">${esc(Model.songLabel(s))}</span><span class="hint">Plays ${clipText(s)}, fades out over ${secs(s.fadeOut)} s</span>${songOk ? '' : '<span class="status no-song">File not on this device</span>'}` : '<span class="v none">None yet</span>'}
+          ${s ? `<span class="v">${esc(Model.songLabel(s))} <span class="pill ${team.songs.includes(s) ? '' : 'common-pill'}">${team.songs.includes(s) ? 'Team song' : 'Common'}</span></span><span class="hint">Plays ${clipText(s)}, fades out over ${secs(s.fadeOut)} s</span>${songOk ? '' : '<span class="status no-song">File not on this device</span>'}` : '<span class="v none">None yet</span>'}
           <div class="row">
             <button class="btn small" data-act="choose-song">${s ? 'Change song' : 'Choose a song'}</button>
-            ${s ? '<button class="btn small" data-act="edit-clip">Edit start and stop</button><button class="btn small danger" data-act="song-remove">Remove</button>' : ''}
+            ${s ? `${team.songs.includes(s) || canAdmin() ? '<button class="btn small" data-act="edit-clip">Edit start and stop</button>' : ''}<button class="btn small danger" data-act="song-remove">Remove</button>` : ''}
           </div>
         </div>
       </div>
@@ -487,7 +517,7 @@ function renderRoster() {
 }
 
 function openSongPicker(p) {
-  const items = [...library.songs].sort((a, b) => a.title.localeCompare(b.title)).map(s => `
+  const items = [...pool().songs].sort((a, b) => a.title.localeCompare(b.title)).map(s => `
     <button class="item ${s.id === p.songId ? 'sel' : ''}" data-pick-song="${esc(s.id)}">
       <span class="grow"><span class="name">${esc(Model.songLabel(s))}</span><span class="sub">${clipText(s)}${Model.songsUsing(team, s.id).length ? ' · walk-up for ' + esc(Model.songsUsing(team, s.id).map(Model.playerName).join(', ')) : ''}</span></span></button>`).join('');
   openDialog(`Walk-up song for ${Model.playerName(p)}`, `
@@ -516,15 +546,16 @@ async function addSongFiles(files) {
   let replaced = 0;
   for (const f of files) {
     if (!/^audio\//.test(f.type) && !/\.(mp3|m4a|aac|wav|ogg)$/i.test(f.name)) continue;
-    const path = `Songs/${safeName(f.name)}`;
+    // common songs (Admin screen) or this team's own (Team screen, and the walk-up picker)
+    const path = commonScope() ? `Songs/${safeName(f.name)}` : Model.teamSongPath(team.id, safeName(f.name));
     await storeFile(path, f);
     const length = await Sound.measure(f);
-    let s = library.songs.find(x => x.path === path);
+    let s = songsHere().find(x => x.path === path);
     if (s) { s.length = length; replaced++; delete peaksCache[s.id]; }
-    else { s = Model.songFromFile(path, { length }); library.songs.push(s); }
+    else { s = Model.songFromFile(path, { length }); songsHere().push(s); }
     added.push(s);
   }
-  saveLibrary();
+  saveBoth();
   if (replaced) toast(`${replaced} song${replaced > 1 ? 's were' : ' was'} already here: the file was updated and the cut points kept.`);
   return added;
 }
@@ -534,11 +565,12 @@ const edit = { songId: null, cursor: 0, track: null, raf: 0 };
 
 function renderSongs() {
   if (ui.songId && !song(ui.songId)) ui.songId = null;
-  if (!ui.songId && library.songs.length) ui.songId = [...library.songs].sort((a, b) => a.title.localeCompare(b.title))[0].id;
+  if (ui.songId && !songsHere().some(x => x.id === ui.songId)) ui.songId = null;
+  if (!ui.songId && songsHere().length) ui.songId = [...songsHere()].sort((a, b) => a.title.localeCompare(b.title))[0].id;
   const s = song(ui.songId);
   if (edit.songId !== ui.songId) { Sound.stopPreview(); edit.songId = ui.songId; edit.cursor = s ? s.start : 0; }
   const q = ui.songQuery.toLowerCase();
-  const list = [...library.songs].sort((a, b) => a.title.localeCompare(b.title))
+  const list = [...songsHere()].sort((a, b) => a.title.localeCompare(b.title))
     .filter(x => !q || `${x.title} ${x.artist} ${Model.songsUsing(team, x.id).map(Model.playerName).join(' ')}`.toLowerCase().includes(q))
     .map(x => {
       const users = Model.songsUsing(team, x.id);
@@ -571,7 +603,7 @@ function renderSongs() {
       </div>
       <p class="hint">Plays ${clipText(s)}${s.length ? ` of ${mmss(s.length)}` : ''}. ${s.stop == null ? `With no stop point a walk-up plays for ${settings.walkupSeconds} seconds.` : ''}</p>
       <div class="row"><b>Moments</b>
-        ${Model.momentsWithSong(team, s.id).map(m => `<button class="chip on" data-act="sm-remove" data-id="${esc(m.id)}" aria-label="Remove from ${esc(m.name)}">${esc(m.name)} ✕</button>`).join('')}
+        ${momentsHere().filter(m => m.songIds.includes(s.id)).map(m => `<button class="chip on" data-act="sm-remove" data-id="${esc(m.id)}" aria-label="Remove from ${esc(m.name)}">${esc(m.name)} ✕</button>`).join('')}
         <button class="chip add" data-act="sm-add">+ Add to a moment</button></div>
       <div class="row" style="border-top:1px solid var(--line);padding-top:12px">
         <span class="hint">${users.length ? 'Walk-up for <b>' + esc(users.map(Model.playerName).join(', ')) + '</b>' : 'Not anyone’s walk-up yet.'}</span>
@@ -585,9 +617,9 @@ function renderSongs() {
   main.innerHTML = `<div class="cols wide-left ${listMode()}">
     <aside class="stack">
       <input class="search" type="search" id="songSearch" placeholder="Search songs or players" value="${esc(ui.songQuery)}" autocomplete="off" aria-label="Search songs">
-      <div class="list" id="songList">${list || (library.songs.length ? '<p class="hint">No songs match.</p>' : '')}</div>
-      <label class="btn outline big file-btn">+ Add songs from this device<input type="file" multiple accept="audio/*,.mp3,.m4a,.wav" data-act="songs-add"></label>
-      <span class="hint">${library.songs.length} song${library.songs.length === 1 ? '' : 's'} on this device</span>
+      <div class="list" id="songList">${list || (songsHere().length ? '<p class="hint">No songs match.</p>' : `<p class="hint">${commonScope() ? 'No common songs yet.' : `No ${esc(team.short || team.name)} songs yet: pitcher music, team favourites, anything only this team uses.`}</p>`)}</div>
+      <label class="btn outline big file-btn">+ Add ${commonScope() ? 'common' : 'team'} songs<input type="file" multiple accept="audio/*,.mp3,.m4a,.wav" data-act="songs-add"></label>
+      <span class="hint">${songsHere().length} ${commonScope() ? 'common songs, for every team' : `${esc(team.short || team.name)} song${songsHere().length === 1 ? '' : 's'}`}. ${commonScope() ? '' : `Common songs (${library.songs.length}) are looked after by the Diamond DJ Admin; use them for walk-ups and moments too.`}</span>
     </aside>${editor}</div>`;
   if (s && stored.has(s.path)) loadWave(s);
 }
@@ -607,7 +639,7 @@ async function loadWave(s) {
       if (peaksCache[s.id]) Store.set('peaks:' + s.id, peaksCache[s.id]).catch(() => {});
     }
     const pk = peaksCache[s.id];
-    if (pk && !s.length) { s.length = pk.duration; saveLibrary(); }
+    if (pk && !s.length) { s.length = pk.duration; saveBoth(); }
     const msg = $('#waveMsg'); if (msg) msg.hidden = !!pk;
     drawWave();
   } catch (e) {
@@ -700,8 +732,10 @@ function deletePrompt(s) {
   return n ? `Tap again: also removes it from ${n} player${n > 1 ? 's' : ''}` : 'Tap again to delete';
 }
 async function deleteSong(s) {
-  Model.removeSongEverywhere(team, s.id);
+  for (const t of Object.values(teams)) Model.removeSongEverywhere(t, s.id);
+  for (const m of library.moments) m.songIds = m.songIds.filter(x => x !== s.id);
   library.songs = library.songs.filter(x => x.id !== s.id);
+  team.songs = team.songs.filter(x => x.id !== s.id);
   delete peaksCache[s.id]; Store.remove('peaks:' + s.id).catch(() => {});
   saveLibrary(); saveTeam();
   await dropFileIfUnused(s.path);
@@ -719,9 +753,13 @@ function openSettings() {
     <div id="installBox" class="stack"></div>
     <h3>Google Drive</h3>
     <div id="driveBox" class="stack"></div>
-    <h3>Team</h3>
-    <div class="grid2"><label class="field">Team name<input type="text" id="setTeamName" value="${esc(team.name)}" autocomplete="off"></label>
-      <label class="field">Short name (top of the screen)<input type="text" id="setTeamShort" value="${esc(team.short || '')}" autocomplete="off" maxlength="16"></label></div>
+    <h3>Your role</h3>
+    <p>${realRole() === role() ? '' : 'Really '}<b>${ROLE_NAME[realRole()]}</b>${realRole() === 'admin' ? '' : ` for ${esc(team.name)}`}${Drive.state.account ? ` <span class="hint">· ${esc(Drive.state.account)}</span>` : ''}</p>
+    <p class="hint">${!Drive.state.lastCheck ? 'This device hasn’t checked Google Drive yet, so everything can be set up here. Roles come from Drive sharing once you check for updates.'
+      : realRole() === 'admin' ? 'You can change the common library and every team.' : realRole() === 'organizer' ? `You can change and publish ${esc(team.name)}. The common songs and moments come from the Diamond DJ Admin.` : 'You run the music. To change the roster, songs or moments, ask your team organizer.'}</p>
+    ${RANK[realRole()] >= 1 ? `<label class="field">View as (to try another role’s screens on this device)<select id="setViewAs">
+      <option value="">Myself: ${ROLE_NAME[realRole()]}</option>${realRole() === 'admin' ? `<option value="organizer" ${settings.viewAs === 'organizer' ? 'selected' : ''}>Team organizer</option>` : ''}
+      <option value="volunteer" ${settings.viewAs === 'volunteer' ? 'selected' : ''}>Volunteer</option></select></label>` : ''}
     <p class="hint">Switch teams, or add one, with the team button at the top left.</p>
     <h3>Game</h3>
     <div class="row"><button class="btn" id="setNewGame">New game (start from batter 1)</button></div>
@@ -744,8 +782,7 @@ function openSettings() {
   paintDrive();
   paintInstall();
   $('#setHelp').onclick = () => openHelp('news');
-  $('#setTeamName').oninput = e => { team.name = e.target.value; saveTeam(); };
-  $('#setTeamShort').oninput = e => { team.short = e.target.value; saveTeam(); $('#teamName').textContent = team.short || team.name || 'Diamond DJ'; };
+  if ($('#setViewAs')) $('#setViewAs').onchange = e => { settings.viewAs = e.target.value || null; saveSettings(); closeDialog(); toast(settings.viewAs ? `Viewing as ${ROLE_NAME[settings.viewAs]}. Change it back in Settings.` : 'Back to your own role.'); };
   $('#setNewGame').onclick = e => { if (!armed(e.currentTarget, 'Tap again: start from batter 1')) return; newGame(); };
   for (const r of document.querySelectorAll('[data-set]')) {
     r.oninput = () => {
@@ -869,7 +906,7 @@ function playingMomentIds() {
 }
 
 function padsHtml(section) {
-  const list = team.moments.filter(m => m.section === section);
+  const list = gameMoments().filter(m => m.section === section);
   const title = section === 'moments' ? 'Key moments' : 'Warmups &amp; breaks';
   const playing = playingMomentIds();
   const pads = list.map(m => {
@@ -883,7 +920,7 @@ function padsHtml(section) {
   }).join('');
   return `<div class="row"><span class="section-title">${title}</span><span class="spacer"></span>
       ${section === 'moments' ? '<span class="hint">Tap to play · tap again to fade</span>' : ''}</div>
-    ${list.length ? `<div class="pads">${pads}</div>` : `<p class="hint">None yet.${settings.locked ? '' : ' Add some in <b>Moments</b>.'}</p>`}`;
+    ${list.length ? `<div class="pads">${pads}</div>` : `<p class="hint">None yet.</p>`}`;
 }
 
 async function playMoment(m) {
@@ -894,21 +931,21 @@ async function playMoment(m) {
     for (const t of Sound.tracks) if (t.momentId === m.id) t.fade(settings.fadeSeconds);
     return;
   }
-  if (!momentSongs(m).length) return toast(settings.locked ? `${m.name} has no songs yet.` : `${m.name} has no songs yet. Add them in Moments.`);
+  if (!momentSongs(m).length) return toast(`${m.name} has no songs yet.`);
   const itemFor = pick => {
     const s = song(pick.songId);
-    Model.notePlayed(m, library, game, s.id);
+    Model.notePlayed(m, pool(), game, s.id);
     saveGame();
     const c = Model.clipOf(s);
     return { path: c.path, start: c.start, stop: c.stop, fadeOut: c.fadeOut, level: c.volume, label: `${m.name} · ${s.title}`, momentId: m.id, clipLength: c.length };
   };
   try {
     if (m.mode === 'playlist') {
-      const ctl = await Sound.playlist(() => { const pick = Model.pickSong(m, library, game); return pick ? itemFor(pick) : null; },
+      const ctl = await Sound.playlist(() => { const pick = Model.pickSong(m, pool(), game); return pick ? itemFor(pick) : null; },
         { xfade: settings.playlistXfade, meta: { momentId: m.id } });
       activePlaylist = { momentId: m.id, ctl };
     } else {
-      const item = itemFor(Model.pickSong(m, library, game));
+      const item = itemFor(Model.pickSong(m, pool(), game));
       const layer = item.clipLength != null && item.clipLength < settings.layerSeconds;
       await Sound.playOne({ ...item, kind: 'sound' }, { layer });
     }
@@ -919,7 +956,7 @@ async function playMoment(m) {
 }
 
 function momentList(section) {
-  return team.moments.filter(m => m.section === section).map(m => {
+  return momentsHere().filter(m => m.section === section).map(m => {
     const n = momentSongs(m).length;
     return `<button class="item ${m.id === ui.momentId ? 'sel' : ''}" data-act="pick-moment" data-id="${esc(m.id)}">
       <span class="swatch ${section === 'breaks' ? 'c-light' : 'c-' + m.color}"></span>
@@ -928,11 +965,44 @@ function momentList(section) {
   }).join('') || '<p class="hint">None yet.</p>';
 }
 
+/* Team screen: the common moments, with Show switches; a selected one shows its songs (locked)
+   and the team's own songs added to it. */
+function commonMomentList(section) {
+  return library.moments.filter(m => m.section === section).map(m => {
+    const shown = !team.hidden.includes(m.id), extra = (team.extra[m.id] || []).length;
+    return `<button class="item ${m.id === ui.momentId ? 'sel' : ''} ${shown ? '' : 'hidden-moment'}" data-act="pick-moment" data-id="${esc(m.id)}">
+      <span class="swatch ${section === 'breaks' ? 'c-light' : 'c-' + m.color}"></span>
+      <span class="grow"><span class="name">${esc(m.name)}</span></span>
+      <span class="sub">${shown ? `${m.songIds.length}${extra ? ` + ${extra} team` : ''}` : 'Hidden'}</span></button>`;
+  }).join('') || '<p class="hint">None.</p>';
+}
+function commonMomentEditor(m) {
+  const shown = !team.hidden.includes(m.id);
+  const row = (s, mine) => `<div class="edit-row"><span class="grow"><span class="name">${esc(Model.songLabel(s))}</span><span class="sub">${mine ? 'Team song' : 'Common song'}${stored.has(s.path) ? '' : ' · file not on this device'}</span></span>
+      <button class="btn small" data-act="m-listen" data-id="${esc(s.id)}">Listen</button>
+      ${mine ? `<button class="btn small square danger" data-act="cm-remove" data-id="${esc(s.id)}" aria-label="Remove from ${esc(m.name)}">✕</button>` : '<span class="lock-mark" role="img" aria-label="Set by the Diamond DJ Admin"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span>'}</div>`;
+  const common = m.songIds.map(song).filter(Boolean), mine = (team.extra[m.id] || []).map(song).filter(Boolean);
+  return `<section class="panel stack" style="gap:16px">${backBar(m.name)}
+    <div class="row"><span class="lineup-title">${esc(m.name)}</span><span class="pill common-pill">Common</span></div>
+    <p class="hint">A common moment, set up by the Diamond DJ Admin for every team (${MODE_TEXT[m.mode]}). ${esc(team.short || team.name)} can hide it, or add its own songs to it.</p>
+    <label class="check"><input type="checkbox" data-act="cm-show" ${shown ? 'checked' : ''}>Show ${esc(m.name)} on ${esc(team.short || team.name)}’s Game screen</label>
+    <div class="stack"><b>Common songs · ${common.length}</b><div class="list">${common.map(s => row(s, false)).join('') || '<p class="hint">None yet.</p>'}</div></div>
+    <div class="stack"><div class="row"><b>${esc(team.short || team.name)} songs · ${mine.length}</b><span class="spacer"></span>
+      <button class="btn outline" data-act="cm-add">+ Add team songs</button></div>
+      <div class="list">${mine.map(s => row(s, true)).join('') || '<p class="hint">None. Added songs play along with the common ones.</p>'}</div></div>
+  </section>`;
+}
+
 function renderMoments() {
-  if (ui.momentId && !Model.findMoment(team, ui.momentId)) ui.momentId = null;
-  if (!ui.momentId && team.moments.length) ui.momentId = team.moments[0].id;
-  const m = Model.findMoment(team, ui.momentId);
-  let editor = '<div class="empty"><p><b>No moments yet.</b></p><p>Tap <b>+ New moment</b> to make a button for the Game screen.</p></div>';
+  const cm = !commonScope() && library.moments.find(x => x.id === ui.momentId);
+  if (cm) {
+    main.innerHTML = `<div class="cols wide-left ${listMode()}">${momentsAside()}${commonMomentEditor(cm)}</div>`;
+    return;
+  }
+  if (ui.momentId && !findHere(ui.momentId)) ui.momentId = null;
+  if (!ui.momentId && momentsHere().length) ui.momentId = momentsHere()[0].id;
+  const m = findHere(ui.momentId);
+  let editor = `<div class="empty"><p><b>No ${commonScope() ? 'common' : 'team'} moments yet.</b></p><p>Tap <b>+ New moment</b> to make a button for ${commonScope() ? 'every team’s' : 'this team’s'} Game screen.</p></div>`;
   if (m) {
     const songs = momentSongs(m);
     const ordered = m.mode !== 'random';
@@ -943,7 +1013,7 @@ function renderMoments() {
         ${ordered ? `<button class="btn small square" data-act="m-song-up" data-id="${esc(s.id)}" aria-label="Move earlier" ${i ? '' : 'disabled'}>↑</button>
         <button class="btn small square" data-act="m-song-down" data-id="${esc(s.id)}" aria-label="Move later" ${i < songs.length - 1 ? '' : 'disabled'}>↓</button>` : ''}
         <button class="btn small square danger" data-act="m-song-remove" data-id="${esc(s.id)}" aria-label="Remove from ${esc(m.name)}">✕</button></div>`).join('');
-    const sameSection = team.moments.filter(x => x.section === m.section);
+    const sameSection = momentsHere().filter(x => x.section === m.section);
     const pos = sameSection.indexOf(m);
     const swatches = Model.COLORS.map(c => `<button class="swatch-btn c-${c}" data-act="m-color" data-v="${c}" aria-pressed="${m.color === c}" aria-label="${c}"></button>`).join('');
     editor = `<section class="panel stack" style="gap:16px">${backBar(m.name)}
@@ -975,12 +1045,18 @@ function renderMoments() {
         <span class="spacer"></span><button class="btn danger" data-act="m-delete">Delete this moment</button></div>
     </section>`;
   }
-  main.innerHTML = `<div class="cols wide-left ${listMode()}">
-    <aside class="stack">
-      <span class="section-title">Key moments</span><div class="list">${momentList('moments')}</div>
-      <span class="section-title" style="margin-top:8px">Warmups &amp; breaks</span><div class="list">${momentList('breaks')}</div>
-      <button class="btn outline big" data-act="m-new">+ New moment or playlist</button>
-    </aside>${editor}</div>`;
+  main.innerHTML = `<div class="cols wide-left ${listMode()}">${momentsAside()}${editor}</div>`;
+}
+function momentsAside() {
+  const mine = commonScope() ? 'Common' : esc(team.short || team.name);
+  const common = commonScope() ? '' : `<span class="section-title">Common moments</span>
+      <p class="hint">From the Diamond DJ Admin, for every team. Tap one to hide it or add team songs.</p>
+      <div class="list">${commonMomentList('moments')}${commonMomentList('breaks')}</div>`;
+  return `<aside class="stack">${common}
+      <span class="section-title"${common ? ' style="margin-top:8px"' : ''}>${mine} key moments</span><div class="list">${momentList('moments')}</div>
+      <span class="section-title" style="margin-top:8px">${mine} warmups &amp; breaks</span><div class="list">${momentList('breaks')}</div>
+      <button class="btn outline big" data-act="m-new">+ New ${commonScope() ? 'common' : 'team'} moment or playlist</button>
+    </aside>`;
 }
 
 /* A list of every song with on/off toggles, for putting songs in a moment (or a song in moments). */
@@ -1000,7 +1076,7 @@ function openToggleList(title, items, isOn, toggle) {
     const b = e.target.closest('[data-tog]');
     if (!b) return;
     toggle(b.dataset.tog);
-    saveTeam();
+    saveBoth();
     $('#togList').innerHTML = html();
     filter();
   };
@@ -1008,16 +1084,16 @@ function openToggleList(title, items, isOn, toggle) {
 
 function openMomentSongPicker(m) {
   openToggleList(`Songs in ${m.name}`,
-    () => [...library.songs].sort((a, b) => a.title.localeCompare(b.title)).map(s => ({ id: s.id, name: Model.songLabel(s), sub: s.stop != null ? clipText(s) : '' })),
+    () => [...(commonScope() ? library.songs : pool().songs)].sort((a, b) => a.title.localeCompare(b.title)).map(s => ({ id: s.id, name: Model.songLabel(s), sub: s.stop != null ? clipText(s) : '' })),
     id => m.songIds.includes(id),
     id => { m.songIds = m.songIds.includes(id) ? m.songIds.filter(x => x !== id) : [...m.songIds, id]; });
 }
 
 function openSongMomentPicker(s) {
   openToggleList(`Moments with ${s.title}`,
-    () => team.moments.map(m => ({ id: m.id, name: m.name, sub: m.section === 'breaks' ? 'Warmups & breaks' : 'Key moments' })),
-    id => Model.findMoment(team, id).songIds.includes(s.id),
-    id => { const m = Model.findMoment(team, id); m.songIds = m.songIds.includes(s.id) ? m.songIds.filter(x => x !== s.id) : [...m.songIds, s.id]; });
+    () => momentsHere().map(m => ({ id: m.id, name: m.name, sub: m.section === 'breaks' ? 'Warmups & breaks' : 'Key moments' })),
+    id => findHere(id).songIds.includes(s.id),
+    id => { const m = findHere(id); m.songIds = m.songIds.includes(s.id) ? m.songIds.filter(x => x !== s.id) : [...m.songIds, s.id]; });
 }
 
 /* ==================================================================== 11. LOCK */
@@ -1123,9 +1199,12 @@ function paintDrive() {
       return `<label class="check"><input type="checkbox" data-pick-team="${esc(r.data.id)}" ${dui.chosen.includes(r.data.id) ? 'checked' : ''}>
         <span>${esc(r.data.name)}<br><small class="hint">${status}</small></span></label>`;
     }).join('') || '<p class="hint">There are no teams in the Drive folder yet. The organizer publishes one from their device.</p>';
-    const keeps = p.teams.filter(t => t.localEdits).map(t => `<div class="warn">
-        <b>${esc(t.name)} was changed on this device</b> since it last came from Drive. Updating replaces its roster and moments with Drive’s. Lineups changed here are always kept.
-        <label class="check"><input type="checkbox" data-keep="${esc(t.id)}" ${dui.keep[t.id] ? 'checked' : ''}>Keep this device’s roster and moments for ${esc(t.name)}</label></div>`).join('');
+    const commonKeep = realRole() === 'admin' && Drive.commonEdits() ? `<div class="warn">
+        <b>The common library was changed on this device</b> and those changes aren’t published. Updating replaces this device’s common songs and moments with Drive’s.
+        <label class="check"><input type="checkbox" data-keep="common" ${dui.keep.common ? 'checked' : ''}>Keep this device’s common songs and moments</label></div>` : '';
+    const keeps = commonKeep + p.teams.filter(t => t.localEdits).map(t => `<div class="warn">
+        <b>${esc(t.name)} was changed on this device</b> since it last came from Drive. Updating replaces its roster, team songs and moments with Drive’s. Lineups changed here are always kept.
+        <label class="check"><input type="checkbox" data-keep="${esc(t.id)}" ${dui.keep[t.id] ? 'checked' : ''}>Keep this device’s roster, team songs and moments for ${esc(t.name)}</label></div>`).join('');
     const summary = !dui.chosen.length ? 'Pick at least one team.'
       : p.items.length ? `${p.items.length} song${p.items.length === 1 ? '' : 's'} and announcement${p.items.length === 1 ? '' : 's'} to download (${mb(p.bytes)}).`
       : 'All the songs are already on this device.';
@@ -1143,39 +1222,21 @@ function paintDrive() {
     $('#drvCancel').onclick = () => { dui.phase = 'idle'; paintDrive(); };
     return;
   }
-  if (dui.phase === 'publish') {
-    const p = dui.pub;
-    const songs = p.uploads.filter(u => u.kind === 'song').length, clips = p.uploads.filter(u => u.kind === 'clip').length;
-    box.innerHTML = `<b>Publish ${esc(team.name)} to Google Drive</b>
-      <p>Sends the roster, moments and ${team.lineups.length} lineup${team.lineups.length === 1 ? '' : 's'}${songs || clips ? `, plus ${[songs && `${songs} song${songs === 1 ? '' : 's'}`, clips && `${clips} announcement${clips === 1 ? '' : 's'}`].filter(Boolean).join(' and ')} Drive doesn’t have yet (${mb(p.bytes)})` : ''}.
-      ${p.firstTime ? `A new folder, <b>${esc(p.folderName)}</b>, is made for the team.` : ''} Nothing in Drive is deleted, and Drive keeps the earlier team file in its version history.</p>
-      ${p.notOnDevice.length ? `<p class="hint">${p.notOnDevice.length} file${p.notOnDevice.length === 1 ? ' isn’t' : 's aren’t'} on this device, so ${p.notOnDevice.length === 1 ? 'it' : 'they'} can’t be sent.</p>` : ''}
-      <p class="hint">Volunteers get the changes next time they tap Check for updates. Their own lineup changes stay.</p>
-      <div class="row"><button class="btn navy" id="pubGo">Publish now</button><button class="btn" id="pubCancel">Cancel</button></div>`;
-    $('#pubGo').onclick = runPublish;
-    $('#pubCancel').onclick = () => { dui.phase = 'idle'; paintDrive(); };
-    return;
-  }
   // idle
   if (!Auth.enabled()) {
     box.innerHTML = `<p class="hint">Google sign-in isn’t set up on this copy yet. Once the organizer adds the sign-in client ID, this is where you get the team’s newest roster, lineups, moments and songs.</p>${conn}`;
   } else if (!Auth.canRedirect()) {
     box.innerHTML = `<p class="hint">Open Diamond DJ from its web address (or the home-screen icon) to use Google Drive.</p>${conn}`;
   } else {
-    const edits = Drive.localEdits(team);
     box.innerHTML = `<p class="hint">Gets the newest roster, lineups, moments and songs from the team’s Google Drive folder and keeps them on this device, so games don’t need wifi. Sign in with the Google account the organizer shared the folder with.</p>
       <div class="row"><button class="btn primary" id="drvCheck">${Drive.state.lastCheck ? 'Check for updates' : 'Download from Google Drive'}</button>
         <button class="btn" id="drvSwitch">Switch Google account</button></div>
       ${dui.note ? `<p class="hint">${esc(dui.note)}</p>` : ''}
       <p class="hint">${when ? `Last checked ${esc(when)}` : 'Not checked yet on this device'}${Drive.state.account ? ` · ${esc(Drive.state.account)}` : ''}</p>
-      ${Drive.state.editor ? `<div class="publish"><b>Organizer: publish to Drive</b>
-        <p class="hint">Sends ${esc(team.name)} from this device (roster, moments, lineups, and any songs or announcements Drive doesn’t have) so every volunteer gets it.
-        ${edits === null ? 'This team hasn’t been published yet.' : edits ? 'This device has changes that aren’t in Drive yet.' : 'Drive already has this device’s roster and moments.'}</p>
-        <div class="row"><button class="btn navy" id="drvPublish">Publish ${esc(team.name)}</button></div></div>` : ''}
+      ${canTeam() ? `<p class="hint">To send changes to everyone: <b>${canAdmin() ? 'Team › Publish, or Admin › Publish' : 'Team › Publish'}</b>.</p>` : ''}
       ${conn}`;
     $('#drvCheck').onclick = startCheck;
     $('#drvSwitch').onclick = () => { Auth.forget(); Auth.signIn('check', { chooseAccount: true }); };
-    if ($('#drvPublish')) $('#drvPublish').onclick = startPublish;
   }
   const f = $('#drvFolder'), c = $('#drvClient');
   f.onchange = () => { settings.driveFolder = f.value.trim(); saveSettings(); };
@@ -1188,7 +1249,7 @@ const meter = f => { const el = $('#drvMeter'); if (el) el.style.width = Math.mi
 function failed(e) {
   dui.phase = 'idle';
   dui.note = driveError(e);
-  if (e && e.message === 'drive:signin') { dui.note = 'Signing in to Google…'; paintDrive(); return Auth.signIn(dui.resume || 'check', { write: dui.resume === 'publish' }); }
+  if (e && e.message === 'drive:signin') { dui.note = 'Signing in to Google…'; paintDrive(); return Auth.signIn('check'); }
   paintDrive();
   toast(dui.note, 6000);
 }
@@ -1222,6 +1283,8 @@ async function runDownload() {
       useTeam(plan.teams[0].id);
       if (!starter.players.length && !Drive.state.teams[starter.id] && starter.id !== team.id) { delete teams[starter.id]; saveTeam(); }
     } else if (teams[team.id]) useTeam(team.id); // refresh the team in use
+    renderNav();
+    if (!dlg.open) render();
     dui.phase = 'idle';
     dui.note = `Up to date. ${r.done ? `${r.done} file${r.done === 1 ? '' : 's'} downloaded.` : ''}${r.failed.length ? ` ${r.failed.length} couldn’t be downloaded; try again later.` : ''}`;
     paintDrive();
@@ -1229,26 +1292,28 @@ async function runDownload() {
   } catch (e) { failed(e); }
 }
 
-async function startPublish() {
-  dui.resume = 'publish';
-  if (!Auth.token() || !Auth.canWrite()) { busy('Signing in to Google…'); return Auth.signIn('publish', { write: true }); }
-  busy('Checking what Drive has…');
+async function startPublish(kind = pui.kind || 'team') {
+  pui.kind = kind;
+  const resume = kind === 'common' ? 'publish-common' : 'publish';
+  if (!Auth.token() || !Auth.canWrite()) { pBusy('Signing in to Google…'); return Auth.signIn(resume, { write: true }); }
+  pBusy('Checking what Drive has…');
   try {
-    dui.pub = await Drive.publishPlan(team, say);
-    dui.phase = 'publish';
-    paintDrive();
-  } catch (e) { failed(e); }
+    pui.plan = kind === 'common' ? await Drive.publishCommonPlan(pSay) : await Drive.publishPlan(team, pSay);
+    pui.phase = 'plan';
+    paintPublish();
+  } catch (e) { pFailed(e); }
 }
 
 async function runPublish() {
-  busy('Publishing…');
+  const common = pui.kind === 'common';
+  pBusy('Publishing…');
   try {
-    const r = await Drive.publish(dui.pub, { say, meter });
-    dui.phase = 'idle';
-    dui.note = `Published ${team.name}${r.sent ? ` and ${r.sent} file${r.sent === 1 ? '' : 's'}` : ''}. Volunteers get it with Check for updates.`;
-    paintDrive();
-    toast(dui.note);
-  } catch (e) { failed(e); }
+    const r = common ? await Drive.publishCommon(pui.plan, { say: pSay, meter: pMeter }) : await Drive.publish(pui.plan, { say: pSay, meter: pMeter });
+    pui.phase = 'idle';
+    pui.note = `Published ${common ? 'the common library' : team.name}${r.sent ? ` and ${r.sent} file${r.sent === 1 ? '' : 's'}` : ''}. ${common ? 'Every team' : 'Everyone on the team'} gets it with Check for updates.`;
+    render();
+    toast(pui.note);
+  } catch (e) { pFailed(e); }
 }
 
 /* Coming back from Google's sign-in page: carry on with what the person was doing. */
@@ -1256,27 +1321,136 @@ function resumeAfterSignIn() {
   const r = Auth.consume();
   if (!r) return false;
   if (settings.locked && r.resume) { toast('Unlock first to use Google Drive.'); return true; }
+  if (String(r.resume).startsWith('publish')) {
+    ui.view = r.resume === 'publish-common' ? 'cpublish' : 'publish';
+    pui.kind = r.resume === 'publish-common' ? 'common' : 'team';
+    render();
+    if (r.error) { pui.note = r.error === 'access_denied' ? 'Google sign-in was cancelled.' : 'Google sign-in didn’t finish. Try again.'; return paintPublish() || true; }
+    startPublish(pui.kind);
+    return true;
+  }
   openSettings();
   if (r.error) {
     dui.note = r.error === 'access_denied' ? 'Google sign-in was cancelled.' : 'Google sign-in didn’t finish. Try again.';
-    return paintDrive();
+    paintDrive();
+    return true;
   }
-  if (r.resume === 'publish') startPublish();
-  else startCheck();
+  startCheck();
   return true;
 }
 
 /* ==================================================================== 9. EVENTS AND STARTUP */
 
 function render() {
-  for (const b of document.querySelectorAll('.tabs [data-view]')) {
-    if (b.dataset.view === ui.view) b.setAttribute('aria-current', 'page');
-    else b.removeAttribute('aria-current');
-  }
+  if ((settings.locked && SETUP_VIEWS.includes(ui.view)) || (TEAM_VIEWS.includes(ui.view) && !canTeam()) || (ADMIN_VIEWS.includes(ui.view) && !canAdmin())) ui.view = 'game';
+  renderNav();
   $('#teamName').textContent = team.short || team.name || 'Diamond DJ';
-  if (ui.view !== 'songs') { Sound.stopPreview(); edit.songId = null; }
-  if (settings.locked && SETUP_VIEWS.includes(ui.view)) ui.view = 'game';
-  ({ game: renderGame, lineup: renderLineup, roster: renderRoster, songs: renderSongs, moments: renderMoments })[ui.view]();
+  if (!['songs', 'csongs'].includes(ui.view)) { Sound.stopPreview(); edit.songId = null; }
+  ({ game: renderGame, lineup: renderLineup, roster: renderRoster, songs: renderSongs, moments: renderMoments, teaminfo: renderTeamInfo,
+    publish: () => renderPublish('team'), csongs: renderSongs, cmoments: renderMoments, cpublish: () => renderPublish('common') })[ui.view]();
+}
+
+/* The header: Game and Lineup for everyone; Team (team organizers) and Admin (Diamond DJ Admin)
+   open their own screens, each with a way back to the game. */
+const ICON_TEAM = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5M16 11a3 3 0 1 0 0-6M18 15c2 .5 3 2 3 5"/></svg>';
+const ICON_ADMIN = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/></svg>';
+function renderNav() {
+  const ws = TEAM_VIEWS.includes(ui.view) ? 'team' : ADMIN_VIEWS.includes(ui.view) ? 'admin' : '';
+  document.body.classList.toggle('ws-team', ws === 'team');
+  document.body.classList.toggle('ws-admin', ws === 'admin');
+  const tab = (v, label, badge) => `<button data-view="${v}"${ui.view === v ? ' aria-current="page"' : ''}>${label}${badge ? '<span class="tab-dot" aria-label="not published"></span>' : ''}</button>`;
+  const teamDirty = Drive.localEdits(team) !== false && (team.players.length || team.songs.length || team.moments.length);
+  const commonDirty = !!Drive.commonEdits() || (Drive.commonEdits() === null && library.songs.length > 0);
+  let html;
+  if (ws === 'team') html = `<button class="ws-back" data-view="game"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>Game</button>
+    <div class="tab-group"><span class="group-label in-game">Team · ${esc(team.short || team.name)}</span><div class="group game ws-tabs">
+      ${tab('roster', 'Roster<span class="wide-only">&nbsp;&amp; walk-ups</span>')}${tab('songs', 'Team songs')}${tab('moments', 'Moments')}${tab('teaminfo', 'Team info')}${tab('publish', 'Publish', teamDirty)}</div></div>`;
+  else if (ws === 'admin') html = `<button class="ws-back" data-view="game"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>Game</button>
+    <div class="tab-group"><span class="group-label in-game">Diamond DJ Admin · all teams</span><div class="group game ws-tabs">
+      ${tab('csongs', 'Common songs')}${tab('cmoments', 'Common moments')}${tab('cpublish', 'Publish', commonDirty)}</div></div>`;
+  else html = `<div class="tab-group"><span class="group-label in-game">In game</span><div class="group game">${tab('game', 'Game')}${tab('lineup', 'Lineup')}</div></div>
+    ${canTeam() ? `<button class="ws-btn" data-view="roster" aria-label="Team: set up ${esc(team.short || team.name)}">${ICON_TEAM}<span>Team</span>${teamDirty ? '<span class="tab-dot"></span>' : ''}</button>` : ''}
+    ${canAdmin() ? `<button class="ws-btn admin" data-view="csongs" aria-label="Admin: the common library">${ICON_ADMIN}<span>Admin</span>${commonDirty ? '<span class="tab-dot"></span>' : ''}</button>` : ''}`;
+  $('#nav').innerHTML = html;
+}
+
+/* ---------------- Team screen › Team info */
+function renderTeamInfo() {
+  const st = Drive.state.teams[team.id];
+  const r = role();
+  main.innerHTML = `<div class="cols">
+    <section class="panel stack" style="gap:14px"><span class="section-title">Team info</span>
+      <div class="grid2"><label class="field">Team name<input type="text" id="tiName" value="${esc(team.name)}" autocomplete="off"></label>
+        <label class="field">Short name (top of the screen)<input type="text" id="tiShort" value="${esc(team.short || '')}" maxlength="16" autocomplete="off"></label></div>
+      <p class="hint">Changes save on this device as you type. <b>Publish</b> sends them to every device on the team.</p>
+    </section>
+    <section class="panel stack" style="gap:12px"><span class="section-title">People and roles</span>
+      <p>On this device you’re <b>${ROLE_NAME[r]}</b>${settings.viewAs ? ' (viewing as, from Settings)' : ''}.</p>
+      <p class="hint">Roles come from Google Drive sharing of ${st ? `the team’s folder, <b>${esc(st.folderName)}</b>` : 'the team’s folder (made the first time the team is published)'}: <b>Editor</b> = team organizer, <b>Viewer</b> = volunteer. Volunteers also need <b>Viewer</b> on the Diamond DJ folder for the common songs.</p>
+      ${st ? `<div class="row"><a class="btn" href="https://drive.google.com/drive/folders/${esc(st.folderId)}" target="_blank" rel="noopener">Open the team’s folder in Google Drive</a></div>` : ''}
+    </section></div>`;
+  $('#tiName').oninput = e => { team.name = e.target.value; saveTeam(); };
+  $('#tiShort').oninput = e => { team.short = e.target.value; saveTeam(); $('#teamName').textContent = team.short || team.name || 'Diamond DJ'; };
+}
+
+/* ---------------- Team screen › Publish, and Admin › Publish (the common library) */
+const pui = { kind: null, phase: 'idle', plan: null, note: '' };
+function renderPublish(kind) {
+  if (pui.kind !== kind && pui.phase !== 'busy') { pui.kind = kind; pui.phase = 'idle'; pui.plan = null; pui.note = ''; }
+  const common = kind === 'common';
+  main.innerHTML = `<div class="stack publish-page">
+    <span class="section-title">${common ? 'Publish the common library' : `Publish ${esc(team.name)}`}</span>
+    <p class="hint">${common ? 'Sends the common songs and common moments on this device to Google Drive. Every team gets them at its next Check for updates.'
+      : `Sends ${esc(team.short || team.name)}’s roster, walk-ups, team songs, moments and lineups on this device to the team’s Google Drive folder. Everyone on the team gets them at their next Check for updates; lineups a volunteer changed on game day stay theirs.`}
+      Nothing in Drive is deleted, and Drive keeps earlier versions.</p>
+    <div class="panel stack" id="pubBox"></div></div>`;
+  paintPublish();
+}
+function paintPublish() {
+  const box = $('#pubBox');
+  if (!box) return;
+  const common = pui.kind === 'common';
+  if (pui.phase === 'busy') {
+    box.innerHTML = `<p class="hint" id="pubSay">${esc(pui.note)}</p><div class="bar"><i id="pubMeter" style="width:0%"></i></div>`;
+    return;
+  }
+  if (pui.phase === 'plan') {
+    const p = pui.plan;
+    const n = p.uploads.length;
+    box.innerHTML = `<b>${common ? 'The common library' : esc(team.name)}</b>
+      <p>Sends ${common ? `${library.songs.length} common song${library.songs.length === 1 ? '' : 's'} and ${library.moments.length} common moments` : `the roster, ${team.songs.length} team song${team.songs.length === 1 ? '' : 's'}, ${team.moments.length} team moment${team.moments.length === 1 ? '' : 's'} and ${team.lineups.length} lineup${team.lineups.length === 1 ? '' : 's'}`}${n ? `, with ${n} file${n === 1 ? '' : 's'} Drive doesn’t have yet (${mb(p.bytes)})` : ''}.
+        ${p.firstTime && !common ? `A new folder, <b>${esc(p.folderName)}</b>, is made for the team.` : ''}</p>
+      ${p.since ? `<div class="warn"><b>Someone published ${common ? 'the common library' : 'this team'} after this device last got it.</b> Get the latest first, so your publish doesn’t undo their changes.
+        <div class="row"><button class="btn navy" id="pubLatest">Get latest first</button></div></div>` : ''}
+      ${p.needsCommon && p.needsCommon.length ? `<div class="warn"><b>${p.needsCommon.length} common song${p.needsCommon.length === 1 ? ' isn’t' : 's aren’t'} in the published common library yet</b> (${esc(p.needsCommon.slice(0, 3).map(s => s.title).join(', '))}${p.needsCommon.length > 3 ? '…' : ''}), so other devices won’t have ${p.needsCommon.length === 1 ? 'it' : 'them'}. The Diamond DJ Admin publishes the common library first (Admin › Publish).</div>` : ''}
+      ${p.removed && p.removed.length ? `<p class="hint">${p.removed.length} song${p.removed.length === 1 ? ' that’s' : 's that are'} in Drive’s common library ${p.removed.length === 1 ? 'isn’t' : 'aren’t'} on this device and will be left out of it (the files stay in Drive).</p>` : ''}
+      ${p.notOnDevice.length ? `<p class="hint">${p.notOnDevice.length} file${p.notOnDevice.length === 1 ? ' isn’t' : 's aren’t'} on this device, so ${p.notOnDevice.length === 1 ? 'it' : 'they'} can’t be sent.</p>` : ''}
+      <div class="row"><button class="btn navy" id="pubGo">${p.since ? 'Publish anyway' : 'Publish now'}</button><button class="btn" id="pubCancel">Cancel</button></div>`;
+    $('#pubGo').onclick = runPublish;
+    $('#pubCancel').onclick = () => { pui.phase = 'idle'; paintPublish(); };
+    if ($('#pubLatest')) $('#pubLatest').onclick = () => { pui.phase = 'idle'; openSettings(); startCheck(); };
+    return;
+  }
+  const edits = common ? Drive.commonEdits() : Drive.localEdits(team);
+  const st = common ? Drive.state.library : Drive.state.teams[team.id];
+  const when = st && st.lastSync ? new Date(st.lastSync).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '';
+  const status = edits === null ? 'Not published from this device yet.' : edits ? 'This device has changes that aren’t in Drive yet.' : 'Drive already has everything on this device.';
+  const ready = Auth.enabled() && Auth.canRedirect();
+  box.innerHTML = `<p><b>${status}</b>${when ? `<br><span class="hint">Last published or updated here ${esc(when)}</span>` : ''}</p>
+    ${pui.note ? `<p class="hint">${esc(pui.note)}</p>` : ''}
+    ${ready ? `<div class="row"><button class="btn navy big" id="pubStart">${common ? 'Publish the common library' : `Publish ${esc(team.short || team.name)}`}</button></div>
+      <p class="hint">You’ll see what will be sent before anything goes.</p>` : '<p class="hint">Open Diamond DJ from its web address or home-screen icon to publish.</p>'}`;
+  if ($('#pubStart')) $('#pubStart').onclick = () => startPublish(pui.kind);
+}
+const pSay = t => { pui.note = t; const el = $('#pubSay'); if (el) el.textContent = t; };
+const pMeter = f => { const el = $('#pubMeter'); if (el) el.style.width = Math.min(100, f * 100).toFixed(1) + '%'; };
+function pBusy(note) { pui.phase = 'busy'; pui.note = note; paintPublish(); }
+function pFailed(e) {
+  pui.phase = 'idle';
+  pui.note = driveError(e);
+  if (e && e.message === 'drive:signin') { pui.note = 'Signing in to Google…'; paintPublish(); return Auth.signIn(pui.kind === 'common' ? 'publish-common' : 'publish', { write: true }); }
+  paintPublish();
+  toast(pui.note, 6000);
 }
 
 function go(view) {
@@ -1328,38 +1502,47 @@ async function onAction(e) {
     case 'edit-order': return openOrderDialog();
     case 'new-game': if (!armed(b, 'Tap again: new game')) return; newGame(); return render();
     case 'game-tab': ui.gameTab = b.dataset.tab; return render();
-    case 'moment': return playMoment(Model.findMoment(team, id));
+    case 'moment': return playMoment(gameMoments().find(m => m.id === id));
     /* moments screen */
     case 'pick-moment': ui.momentId = id; ui.phoneDetail = true; main.scrollTop = 0; return render();
     case 'm-new': {
       const name = await askText('New moment or playlist', 'Button name', '', 'Create');
       if (!name) return;
       const m = Model.newMoment({ name });
-      team.moments.push(m); ui.momentId = m.id; ui.phoneDetail = true; saveTeam(); return render();
+      momentsHere().push(m); ui.momentId = m.id; ui.phoneDetail = true; saveBoth(); return render();
     }
     case 'm-color': case 'm-section': case 'm-mode': {
-      const m = Model.findMoment(team, ui.momentId);
+      const m = findHere(ui.momentId);
       m[{ 'm-color': 'color', 'm-section': 'section', 'm-mode': 'mode' }[act]] = b.dataset.v;
-      if (act === 'm-section') { team.moments = team.moments.filter(x => x !== m).concat(m); } // goes to the end of its new section
-      saveTeam(); return render();
+      if (act === 'm-section') { setMomentsHere(momentsHere().filter(x => x !== m).concat(m)); } // goes to the end of its new section
+      saveBoth(); return render();
     }
     case 'm-move': {
-      const m = Model.findMoment(team, ui.momentId);
-      const same = team.moments.filter(x => x.section === m.section);
+      const m = findHere(ui.momentId);
+      const same = momentsHere().filter(x => x.section === m.section);
       const other = same[same.indexOf(m) + Number(b.dataset.d)];
       if (!other) return;
-      const i = team.moments.indexOf(m), j = team.moments.indexOf(other);
-      [team.moments[i], team.moments[j]] = [team.moments[j], team.moments[i]];
-      saveTeam(); return render();
+      const i = momentsHere().indexOf(m), j = momentsHere().indexOf(other);
+      const ms = momentsHere(); [ms[i], ms[j]] = [ms[j], ms[i]];
+      saveBoth(); return render();
     }
     case 'm-delete': {
       if (!armed(b, 'Tap again to delete this moment')) return;
-      team.moments = team.moments.filter(x => x.id !== ui.momentId);
-      ui.momentId = null; saveTeam(); return render();
+      setMomentsHere(momentsHere().filter(x => x.id !== ui.momentId));
+      ui.momentId = null; saveBoth(); return render();
     }
-    case 'm-add-songs': return openMomentSongPicker(Model.findMoment(team, ui.momentId));
+    case 'cm-show': { const mid = ui.momentId; team.hidden = b.checked ? team.hidden.filter(x => x !== mid) : [...team.hidden, mid]; saveTeam(); return render(); }
+    case 'cm-remove': { team.extra[ui.momentId] = (team.extra[ui.momentId] || []).filter(x => x !== id); saveTeam(); return render(); }
+    case 'cm-add': {
+      const mid = ui.momentId, cmn = library.moments.find(x => x.id === mid);
+      return openToggleList(`${team.short || team.name} songs in ${cmn.name}`,
+        () => [...team.songs, ...library.songs.filter(x => !cmn.songIds.includes(x.id))].map(x => ({ id: x.id, name: Model.songLabel(x), sub: team.songs.includes(x) ? 'Team song' : 'Common song' })),
+        x => (team.extra[mid] || []).includes(x),
+        x => { const l = team.extra[mid] || []; team.extra[mid] = l.includes(x) ? l.filter(y => y !== x) : [...l, x]; });
+    }
+    case 'm-add-songs': return openMomentSongPicker(findHere(ui.momentId));
     case 'm-song-remove': case 'm-song-up': case 'm-song-down': {
-      const m = Model.findMoment(team, ui.momentId);
+      const m = findHere(ui.momentId);
       const i = m.songIds.indexOf(id);
       if (act === 'm-song-remove') m.songIds.splice(i, 1);
       else {
@@ -1367,7 +1550,7 @@ async function onAction(e) {
         if (j < 0 || j >= m.songIds.length) return;
         [m.songIds[i], m.songIds[j]] = [m.songIds[j], m.songIds[i]];
       }
-      saveTeam(); return render();
+      saveBoth(); return render();
     }
     case 'm-listen': {
       const x = song(id), c = Model.clipOf(x);
@@ -1375,7 +1558,7 @@ async function onAction(e) {
         .catch(() => toast('That song’s file isn’t on this device.'));
     }
     case 'sm-add': return openSongMomentPicker(s);
-    case 'sm-remove': { const m = Model.findMoment(team, id); m.songIds = m.songIds.filter(x => x !== s.id); saveTeam(); return render(); }
+    case 'sm-remove': { const m = findHere(id); m.songIds = m.songIds.filter(x => x !== s.id); saveBoth(); return render(); }
     case 'go': return go(b.dataset.view);
     case 'load-demo': return loadDemo();
     /* lineups */
@@ -1439,9 +1622,9 @@ async function onAction(e) {
     case 'intro-remove': { const old = p.intro.path; p.intro = null; saveTeam(); await dropFileIfUnused(old); return render(); }
     case 'choose-song': return openSongPicker(p);
     case 'song-remove': p.songId = null; saveTeam(); return render();
-    case 'edit-clip': ui.songId = p.songId; go('songs'); ui.phoneDetail = true; return render();
+    case 'edit-clip': ui.songId = p.songId; go(team.songs.some(x => x.id === p.songId) ? 'songs' : 'csongs'); ui.phoneDetail = true; return render();
     case 'test-walkup': {
-      const plan = Model.walkupPlan(p, library, settings);
+      const plan = Model.walkupPlan(p, pool(), settings);
       if (plan) Sound.walkup(plan, `Test · ${Model.playerName(p)}`, { playerId: p.id }).catch(() => toast('A file for this player isn’t on this device.'));
       return;
     }
@@ -1451,15 +1634,15 @@ async function onAction(e) {
       if (edit.track && edit.track.state === 'playing') { edit.cursor = edit.track.time; Sound.stopPreview(); edit.track = null; return previewTick(); }
       return previewFrom(edit.cursor >= (s.length || Infinity) - 0.5 ? 0 : edit.cursor);
     case 'pv-clip': return previewFrom(s.start, true);
-    case 'set-start': setSongField(s, 'start', edit.cursor); saveLibrary(); return refreshSongEditor();
+    case 'set-start': setSongField(s, 'start', edit.cursor); saveBoth(); return refreshSongEditor();
     case 'set-stop':
       if (edit.cursor <= s.start + 0.5) return toast('The stop point has to be after the start point.');
-      setSongField(s, 'stop', edit.cursor); saveLibrary(); return refreshSongEditor();
+      setSongField(s, 'stop', edit.cursor); saveBoth(); return refreshSongEditor();
     case 'step': {
       const k = b.dataset.k, d = +b.dataset.d;
       const cur = k === 'volume' ? Math.round(s.volume * 100) : k === 'stop' ? (s.stop ?? Math.min(s.length || 1e9, s.start + settings.walkupSeconds)) : s[k];
       setSongField(s, k, cur + d * (k === 'volume' ? 10 : 0.5));
-      saveLibrary(); return refreshSongEditor();
+      saveBoth(); return refreshSongEditor();
     }
     case 'song-delete': {
       if (!armed(b, deletePrompt(s))) return;
@@ -1508,12 +1691,12 @@ main.addEventListener('input', e => {
     const again = $('#songSearch'); again.focus(); again.setSelectionRange(pos, pos);
   }
   if (t.dataset.sf === 'title' || t.dataset.sf === 'artist') {
-    const s = song(ui.songId); s[t.dataset.sf] = t.value; saveLibrary();
+    const s = song(ui.songId); s[t.dataset.sf] = t.value; saveBoth();
     const item = document.querySelector(`#songList [data-id="${CSS.escape(s.id)}"] .name`);
     if (item) item.textContent = Model.songLabel(s);
   }
   if (t.dataset.mf === 'name') {
-    const m = Model.findMoment(team, ui.momentId); m.name = t.value; saveTeam();
+    const m = findHere(ui.momentId); m.name = t.value; saveBoth();
     const item = document.querySelector(`[data-act="pick-moment"][data-id="${CSS.escape(m.id)}"] .name`);
     if (item) item.textContent = m.name;
   }
@@ -1523,12 +1706,12 @@ main.addEventListener('change', async e => {
   const t = e.target;
   if (t.id === 'luSelect') { ui.lineupId = t.value; return render(); }
   if (t.id === 'gameLineup') { game.lineupId = t.value; game.upNext = null; saveGame(); return render(); }
-  if (t.dataset.mf === 'skipPlayed') { Model.findMoment(team, ui.momentId).skipPlayed = t.checked; saveTeam(); return; }
+  if (t.dataset.mf === 'skipPlayed') { findHere(ui.momentId).skipPlayed = t.checked; saveBoth(); return; }
   if (t.dataset.pf === 'active') {
     const p = player(ui.playerId); p.active = t.checked; Model.syncLineups(team); saveTeam(); return render();
   }
   if (t.dataset.sf && !['title', 'artist'].includes(t.dataset.sf)) {
-    const s = song(ui.songId); setSongField(s, t.dataset.sf, t.value); saveLibrary(); return refreshSongEditor();
+    const s = song(ui.songId); setSongField(s, t.dataset.sf, t.value); saveBoth(); return refreshSongEditor();
   }
   if (t.dataset.act === 'intro-file' && t.files[0]) {
     const p = player(ui.playerId);
@@ -1553,14 +1736,14 @@ main.addEventListener('change', async e => {
     const s = song(ui.songId);
     const f = t.files[0];
     const old = s.path;
-    const path = `Songs/${safeName(f.name)}`;
-    if (path !== old && library.songs.some(x => x.path === path)) { toast('Another song already uses that file.'); return; }
+    const path = commonScope() ? `Songs/${safeName(f.name)}` : Model.teamSongPath(team.id, safeName(f.name));
+    if (path !== old && songsHere().some(x => x.path === path)) { toast('Another song already uses that file.'); return; }
     await storeFile(path, f);
     s.path = path; s.length = await Sound.measure(f);
     delete peaksCache[s.id]; Store.remove('peaks:' + s.id).catch(() => {});
     if (s.start > s.length) s.start = 0;
     if (s.stop != null && s.stop > s.length) s.stop = null;
-    saveLibrary();
+    saveBoth();
     if (old !== path) await dropFileIfUnused(old);
     toast('File replaced. Check the start point.');
     return render();
@@ -1715,7 +1898,7 @@ function openHelp(section) {
 
     <div ${Drive.state.editor ? '' : 'hidden'}>
     <h3>For organizers</h3>
-    ${q('How do I send changes to every device?', `<p><b>Settings › Publish to Drive</b>. It lists what will be sent (new songs, announcement clips, the team file) before anything goes. Volunteers get it the next time they tap <b>Check for updates</b>. Nothing in Drive is deleted, and Drive keeps earlier versions.</p>`)}
+    ${q('How do I send changes to every device?', `<p><b>Team › Publish</b> (and, for the common songs and moments, <b>Admin › Publish</b>). It lists what will be sent (new songs, announcement clips, the team file) before anything goes. Volunteers get it the next time they tap <b>Check for updates</b>. Nothing in Drive is deleted, and Drive keeps earlier versions.</p>`)}
     ${q('How do I add a volunteer?', `<p>Share the <b>Diamond DJ</b> Google Drive folder with their Google account as <b>Viewer</b> (or <b>Editor</b> for someone who will publish). While the app is in testing, also add them in Google Cloud (Diamond DJ project › Google Auth Platform › Audience › <b>Test users</b>).</p>`)}
     ${q('How do I add a song or set where it starts?', `<p><b>Songs › Add songs</b> and pick MP3s. Tap a song, play it, then <b>Set start here</b> at the catchy part and <b>Set stop here</b> where it should end. Link it to a player in <b>Roster</b>, then publish.</p>`)}
     </div>

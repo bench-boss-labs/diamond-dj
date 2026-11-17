@@ -6,6 +6,21 @@ screen, and plays everything from the device, so no wifi is needed at the field.
 
 First team: U13 Burlington Bees. Design spec and mockups live in the claude.ai project "Diamond DJ".
 
+## Roles (version 0.6)
+
+| Role | Google Drive sharing | Sees |
+| --- | --- | --- |
+| Diamond DJ Admin | Editor on the Diamond DJ folder | Game, Lineup, **Team** (any team), **Admin** |
+| Team organizer | Editor on their team's folder | Game, Lineup, **Team** |
+| Volunteer | Viewer on their team's folder and the Diamond DJ folder | Game, Lineup |
+
+Roles are read at Check for updates. A device that has never checked Drive can set everything up.
+The Admin can try the other roles with Settings › Your role › View as.
+
+- **Team screen:** Roster & walk-ups, Team songs, Moments (common ones: show/hide, add team songs; plus
+  team moments), Team info, Publish (the team file, team songs, announcements).
+- **Admin screen:** Common songs, Common moments, Publish (the common library).
+
 ## What it does (version 0.5)
 
 - **Game**: big "Up next" card with **Play walkup** (announcement, then the song) and **Skip**;
@@ -52,11 +67,12 @@ First team: U13 Burlington Bees. Design spec and mockups live in the claude.ai p
 ## Google Drive
 
 ```
-Diamond DJ/                      (shared person by person: Viewer = volunteer, Editor = organizer)
-├── library.diamond.json         every song's title and cut points, all teams
-├── Shared Songs/…mp3            each song once, whichever teams use it
+Diamond DJ/                      (shared person by person; see Roles)
+├── library.diamond.json         the common library: common songs (titles, cut points) and common moments
+├── Common Songs/…mp3            the common songs' files
 └── U13 Bees/                    one folder per team (made by the first Publish)
-    ├── U13-Bees.diamond.json    roster, moments, lineups
+    ├── U13-Bees.diamond.json    roster, walk-ups, team songs, team moments, lineups
+    ├── Team Songs/…mp3          songs only this team uses (pitcher music, favourites)
     └── Announcements/…mp3       one clip per player
 ```
 

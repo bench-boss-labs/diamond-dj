@@ -139,47 +139,48 @@ with sync_playwright() as p:
     page.click('[data-act="new-game"]'); page.click('[data-act="new-game"]')
     check('New game clears the played songs', page.evaluate("game.played.length") == 0)
 
-    # Moments screen
-    page.click('.tabs [data-view="moments"]')
+    # Admin › Common moments (the demo's moments are common; Pitcher Warmup is the team's own)
+    page.click('#nav [data-view="csongs"]')
+    page.click('.tabs [data-view="cmoments"]')
     page.click('[data-act="pick-moment"][data-id="demo_m4"]')
     page.click('[data-act="m-add-songs"]')
     page.click('#togList [data-tog="demo_s2"]'); page.click('#togList [data-tog="demo_s4"]')
     page.click('#dlgClose')
-    check('songs added to Walk', page.evaluate("Model.findMoment(team, 'demo_m4').songIds") == ['demo_s2', 'demo_s4'])
+    check('songs added to Walk', page.evaluate("Model.findMoment(library, 'demo_m4').songIds") == ['demo_s2', 'demo_s4'])
     page.click('[data-act="m-mode"][data-v="order"]')
     page.click('[data-act="m-song-down"][data-id="demo_s2"]')
-    check('reorder songs in an in-order moment', page.evaluate("Model.findMoment(team, 'demo_m4').songIds") == ['demo_s4', 'demo_s2'])
+    check('reorder songs in an in-order moment', page.evaluate("Model.findMoment(library, 'demo_m4').songIds") == ['demo_s4', 'demo_s2'])
     page.fill('[data-mf="name"]', 'Ball Four')
     page.click('[data-act="m-color"][data-v="gold"]')
-    check('rename and recolour', page.evaluate("[Model.findMoment(team, 'demo_m4').name, Model.findMoment(team, 'demo_m4').color].join()") == 'Ball Four,gold')
+    check('rename and recolour', page.evaluate("[Model.findMoment(library, 'demo_m4').name, Model.findMoment(library, 'demo_m4').color].join()") == 'Ball Four,gold')
     page.click('[data-act="m-move"][data-d="-1"]')
-    check('move a moment earlier', page.evaluate("team.moments.findIndex(m => m.id === 'demo_m4')") == 2)
+    check('move a moment earlier', page.evaluate("library.moments.findIndex(m => m.id === 'demo_m4')") == 2)
     page.screenshot(path=f'{OUT}/moments.png')
     page.click('[data-act="m-new"]'); page.fill('#askInput', 'Pitching Change'); page.click('#askOk')
     page.wait_for_selector('[data-mf="name"][value="Pitching Change"]')
-    check('create a moment', page.evaluate("team.moments.some(m => m.name === 'Pitching Change')"))
+    check('create a moment', page.evaluate("library.moments.some(m => m.name === 'Pitching Change')"))
     page.click('[data-act="m-delete"]'); page.click('[data-act="m-delete"]')
-    check('delete a moment (tap twice)', not page.evaluate("team.moments.some(m => m.name === 'Pitching Change')"))
+    check('delete a moment (tap twice)', not page.evaluate("library.moments.some(m => m.name === 'Pitching Change')"))
 
     # Songs editor: moments chips
-    page.click('.tabs [data-view="songs"]')
+    page.click('.tabs [data-view="csongs"]')
     page.click('[data-act="pick-song"][data-id="demo_s3"]')
     page.click('[data-act="sm-add"]'); page.click('#togList [data-tog="demo_m8"]'); page.click('#dlgClose')
-    check('add a song to a moment from Songs', 'demo_s3' in page.evaluate("Model.findMoment(team, 'demo_m8').songIds"))
+    check('add a song to a moment from Songs', 'demo_s3' in page.evaluate("Model.findMoment(library, 'demo_m8').songIds"))
     page.click('[data-act="sm-remove"][data-id="demo_m8"]')
-    check('remove it again with the chip', 'demo_s3' not in page.evaluate("Model.findMoment(team, 'demo_m8').songIds"))
+    check('remove it again with the chip', 'demo_s3' not in page.evaluate("Model.findMoment(library, 'demo_m8').songIds"))
 
     # Lock
     page.click('#lockBtn')
     check('Lock goes to Game and hides setup and settings',
-          page.evaluate("ui.view") == 'game' and not page.is_visible('.setup-group') and not page.is_visible('#settingsBtn') and page.is_visible('[data-view="lineup"]'))
+          page.evaluate("ui.view") == 'game' and not page.is_visible('.ws-btn') and not page.is_visible('#settingsBtn') and page.is_visible('[data-view="lineup"]'))
     page.click('.tabs [data-view="lineup"]')
     check('Lineup still works when locked', page.evaluate("ui.view") == 'lineup')
     page.click('#lockBtn'); time.sleep(0.3)
     check('a quick tap does not unlock', page.evaluate("settings.locked") is True)
     lb = page.locator('#lockBtn').bounding_box()
     page.mouse.move(lb['x'] + 10, lb['y'] + 10); page.mouse.down(); time.sleep(1.7); page.mouse.up()
-    check('press and hold unlocks', page.evaluate("settings.locked") is False and page.is_visible('.setup-group'))
+    check('press and hold unlocks', page.evaluate("settings.locked") is False and page.is_visible('.ws-btn'))
     page.click('#lockBtn')  # leave it locked to check it survives a reload
 
     # reload: everything persisted
@@ -188,7 +189,7 @@ with sync_playwright() as p:
     check('lineup choice and players survive a reload',
           page.evaluate("Model.findLineup(team, game.lineupId).name") == 'Doubleheader' and page.evaluate("team.players.length") == 11)
     check('lock and moment edits survive a reload',
-          page.evaluate("settings.locked") is True and page.evaluate("Model.findMoment(team, 'demo_m4').name") == 'Ball Four')
+          page.evaluate("settings.locked") is True and page.evaluate("Model.findMoment(library, 'demo_m4').name") == 'Ball Four')
     page.screenshot(path=f'{OUT}/game-locked.png')
 
     # phone
@@ -229,7 +230,7 @@ with sync_playwright() as p:
     ph.click('.back-btn')
     check('phone roster: Back returns to the list', ph.is_visible('#rosterList'))
     # P6: songs list, clip editor
-    ph.click('.tabs [data-view="songs"]')
+    ph.click('.tabs [data-view="game"]'); ph.click('#nav [data-view="csongs"]')
     ph.click('[data-act="pick-song"][data-id="demo_s1"]')
     ph.wait_for_function("document.querySelector('#waveMsg') && document.querySelector('#waveMsg').hidden", timeout=10000)
     grid = ph.evaluate("getComputedStyle(document.querySelector('.clip-btns')).gridTemplateColumns.split(' ').length")
@@ -238,7 +239,7 @@ with sync_playwright() as p:
     ph.screenshot(path=f'{OUT}/p6-song.png')
     ph.click('.back-btn')
     # moments: same pattern
-    ph.click('.tabs [data-view="moments"]')
+    ph.click('.tabs [data-view="cmoments"]')
     check('phone moments: list only', ph.is_visible('[data-act="pick-moment"]') and not ph.is_visible('[data-mf="name"]'))
     ph.click('[data-act="pick-moment"][data-id="demo_m1"]')
     check('phone moments: one moment full screen', ph.is_visible('[data-mf="name"]') and not ph.is_visible('[data-act="pick-moment"]'))

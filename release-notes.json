@@ -1,5 +1,35 @@
 [
   {
+    "version": "0.6.0",
+    "date": "2026-11-17",
+    "notes": [
+      {
+        "type": "new",
+        "text": "Three roles, from Google Drive sharing: Diamond DJ Admin (the whole Diamond DJ folder), Team organizer (their team's folder) and Volunteer (view only). Volunteers see Game and Lineup only."
+      },
+      {
+        "type": "new",
+        "text": "The Team screen (Team button, for team organizers): Roster & walk-ups, Team songs (pitcher music, team favourites), Moments, Team info and Publish."
+      },
+      {
+        "type": "new",
+        "text": "The Admin screen (Admin button, for the Diamond DJ Admin): common songs and common moments for every team, and Publish for the common library."
+      },
+      {
+        "type": "new",
+        "text": "Common moments come from the Diamond DJ Admin. A team can hide the ones it doesn't use, add its own songs to one, and make its own team moments."
+      },
+      {
+        "type": "new",
+        "text": "Settings › Your role › View as: the Diamond DJ Admin can try the Team organizer and Volunteer screens on one device."
+      },
+      {
+        "type": "improved",
+        "text": "Publish warns you if someone else published after this device last got the team or library, with Get latest first."
+      }
+    ]
+  },
+  {
     "version": "0.5.1",
     "date": "2026-11-17",
     "quiet": true,

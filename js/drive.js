@@ -24,7 +24,8 @@ const DRIVE = {
   auth: 'https://accounts.google.com/o/oauth2/v2/auth',
   scope: 'https://www.googleapis.com/auth/drive.readonly',
   writeScope: 'https://www.googleapis.com/auth/drive',
-  songsFolder: 'Shared Songs',
+  songsFolder: 'Common Songs',
+  teamSongsFolder: 'Team Songs',
   libraryFile: 'library.diamond.json',
   clipsFolder: 'Announcements',
 };
@@ -74,11 +75,12 @@ const Auth = {
 };
 
 const Drive = {
-  state: { editor: false, account: '', lastCheck: 0, library: null, teams: {}, files: {} },
+  // editor: this account can change the Diamond DJ folder (Diamond DJ Admin). roles: team id → true when it can change that team's folder.
+  state: { editor: false, account: '', lastCheck: 0, library: null, teams: {}, files: {}, roles: {} },
 
   async load() {
     const s = await Store.get('drive');
-    if (s) this.state = { ...this.state, ...s, teams: s.teams || {}, files: s.files || {} };
+    if (s) this.state = { ...this.state, ...s, teams: s.teams || {}, files: s.files || {}, roles: s.roles || {} };
   },
   save() { return Store.set('drive', this.state).catch(e => console.warn(e)); },
 
@@ -119,7 +121,7 @@ const Drive = {
     let token = '';
     do {
       const p = { q: `'${folderId}' in parents and trashed = false`, pageSize: '1000', includeItemsFromAllDrives: 'true',
-        fields: 'nextPageToken,files(id,name,mimeType,size,md5Checksum,modifiedTime)' };
+        fields: 'nextPageToken,files(id,name,mimeType,size,md5Checksum,modifiedTime,capabilities(canAddChildren))' };
       if (token) p.pageToken = token;
       const j = await this.json('files', p);
       out.push(...(j.files || []));
@@ -147,8 +149,8 @@ const Drive = {
 
   /* ------------------------------------------------------------ reading the folder */
 
-  /* Everything in the Diamond DJ folder that matters: who may publish, the library, the songs,
-     and each team (its file and announcement clips). */
+  /* Everything in the Diamond DJ folder that matters: who may change what, the common library
+     and its songs, and each team (its file, team songs and announcement clips). */
   async scan(say = () => {}) {
     if (navigator.onLine === false) throw new Error('drive:offline');
     say('Looking at the Google Drive folder…');
@@ -159,8 +161,9 @@ const Drive = {
     const songsFolder = top.find(f => f.mimeType === FOLDER_TYPE && f.name === DRIVE.songsFolder) || null;
     const songFiles = new Map((songsFolder ? await this.list(songsFolder.id) : []).filter(f => f.mimeType !== FOLDER_TYPE).map(f => [f.name, f]));
     const libFile = top.find(f => f.name === DRIVE.libraryFile) || null;
-    const libData = libFile ? Model.checkLibrary(await (await this.download(libFile.id)).json()) : Model.newLibrary();
+    const libData = libFile ? Model.checkLibrary(await (await this.download(libFile.id)).json()) : null;
     const remoteTeams = [];
+    const roles = {};
     for (const folder of top.filter(f => f.mimeType === FOLDER_TYPE && f !== songsFolder)) {
       say(`Reading ${folder.name}…`);
       const inside = await this.list(folder.id);
@@ -168,10 +171,14 @@ const Drive = {
       if (!file) continue;
       let data;
       try { data = Model.checkTeam(await (await this.download(file.id)).json()); } catch (e) { continue; }
-      const clips = inside.find(f => f.mimeType === FOLDER_TYPE && f.name === DRIVE.clipsFolder) || null;
-      const clipFiles = new Map((clips ? await this.list(clips.id) : []).map(f => [f.name, f]));
-      remoteTeams.push({ folder, file, data, clipsFolder: clips, clipFiles });
+      const sub = name => inside.find(f => f.mimeType === FOLDER_TYPE && f.name === name) || null;
+      const files = async folder => new Map((folder ? await this.list(folder.id) : []).filter(f => f.mimeType !== FOLDER_TYPE).map(f => [f.name, f]));
+      const clipsFolder = sub(DRIVE.clipsFolder), teamSongsFolder = sub(DRIVE.teamSongsFolder);
+      const editor = !!folder.capabilities?.canAddChildren;
+      roles[data.id] = editor;
+      remoteTeams.push({ folder, file, data, editor, clipsFolder, clipFiles: await files(clipsFolder), teamSongsFolder, teamSongFiles: await files(teamSongsFolder) });
     }
+    this.state.roles = roles;
     this.save();
     return { root, editor: this.state.editor, songsFolder, songFiles, libFile, libData, teams: remoteTeams };
   },
@@ -193,9 +200,12 @@ const Drive = {
       const changed = !local || !st || st.modifiedTime !== r.file.modifiedTime;
       const localEdits = !!(local && st && Model.setupPrint(local) !== st.setupPrint);
       teamsPlan.push({ id: r.data.id, name: r.data.name, changed, localEdits, onDevice: !!local });
-      for (const id of Model.teamSongIds(r.data)) {
-        const s = Model.findSong(remote.libData, id) || Model.findSong(library, id);
-        if (s) want(s.path, remote.songFiles.get(s.path.replace(/^Songs\//, '')));
+      const lib = remote.libData || library;
+      for (const id of Model.teamSongIds(r.data, lib)) {
+        const own = Model.findSong({ songs: r.data.songs }, id);
+        if (own) { want(own.path, r.teamSongFiles.get(Model.fileName(own.path))); continue; }
+        const s = Model.findSong(lib, id) || Model.findSong(library, id);
+        if (s) want(s.path, remote.songFiles.get(Model.fileName(s.path)));
       }
       for (const p of r.data.players) if (p.intro && p.intro.path) want(p.intro.path, r.clipFiles.get(p.intro.path.replace(/^Announcements\//, '')));
     }
@@ -229,8 +239,11 @@ const Drive = {
     if (stopped()) return { stopped: true, done, failed };
 
     // the songs' titles and cut points, then each team
-    library = Model.mergeLibrary(library, remote.libData, { keepLocal: Object.values(keepSetup).some(Boolean) });
-    saveLibrary();
+    if (remote.libData) {
+      library = Model.mergeLibrary(library, remote.libData, { keepLocal: !!keepSetup.common });
+      this.state.library = { fileId: remote.libFile.id, modifiedTime: remote.libFile.modifiedTime, print: Model.fingerprint(library), lastSync: Date.now() };
+      saveLibrary();
+    }
     for (const tp of plan.teams) {
       const r = remote.teams.find(x => x.data.id === tp.id);
       const st = this.state.teams[tp.id];
@@ -248,77 +261,109 @@ const Drive = {
     return { stopped: false, done, failed };
   },
 
-  /* ------------------------------------------------------------ publishing (Editors only) */
+  /* ------------------------------------------------------------ publishing */
 
+  // a file on this device that Drive may not have yet: compare with what Drive has under that name
+  async consider(uploads, notOnDevice, path, name, inDrive, folder) {
+    if (!stored.has(path)) { notOnDevice.push(path); return; }
+    const blob = await Store.audio.get(path);
+    const have = this.state.files[path];
+    if (inDrive && ((have && have.id === inDrive.id && have.md5 === (inDrive.md5Checksum || '')) || (!have && +inDrive.size === blob.size))) {
+      this.state.files[path] = { id: inDrive.id, md5: inDrive.md5Checksum || '', size: +inDrive.size || blob.size };
+      return;
+    }
+    uploads.push({ path, name, folder, replaceId: inDrive ? inDrive.id : null, size: blob.size });
+  },
+  async sendFiles(uploads, folders, { say, meter, bytes }) {
+    let sent = 0, n = 0;
+    for (const u of uploads) {
+      say(`Sending ${++n} of ${uploads.length}: ${u.name}`);
+      const blob = await Store.audio.get(u.path);
+      const type = blob.type || 'audio/mpeg';
+      const r = u.replaceId ? await this.replace(u.replaceId, blob, type) : await this.uploadNew(u.name, (await folders[u.folder]()).id, blob, type);
+      this.state.files[u.path] = { id: r.id, md5: r.md5Checksum || '', size: +r.size || blob.size };
+      sent += u.size;
+      meter(bytes ? sent / bytes : n / uploads.length);
+    }
+    await this.save();
+  },
+  json2blob: obj => new Blob([JSON.stringify(obj, null, 1)], { type: 'application/json' }),
+
+  /* Publishing one team (its team organizers, or the Diamond DJ Admin): the team file, its team
+     songs and announcements. The common library isn't touched. */
   async publishPlan(t, say = () => {}) {
     const remote = await this.scan(say);
-    if (!remote.editor) throw new Error('drive:noteditor');
-    const st = this.state.teams[t.id];
     const existing = remote.teams.find(r => r.data.id === t.id) || null;
+    if (existing ? !existing.editor && !remote.editor : !remote.editor) throw new Error('drive:noteditor');
+    const st = this.state.teams[t.id];
     const folderName = existing ? existing.folder.name : (t.short || t.name || 'Team').replace(/[\\/]+/g, '-').trim();
-    const clipFiles = existing ? existing.clipFiles : new Map();
     const uploads = [], notOnDevice = [];
-    const consider = async (path, driveName, inDrive, kind) => {
-      if (!stored.has(path)) { notOnDevice.push(path); return; }
-      const blob = await Store.audio.get(path);
-      const have = this.state.files[path];
-      if (inDrive && ((have && have.id === inDrive.id && have.md5 === (inDrive.md5Checksum || '')) || (!have && +inDrive.size === blob.size))) {
-        this.state.files[path] = { id: inDrive.id, md5: inDrive.md5Checksum || '', size: +inDrive.size || blob.size };
-        return;
-      }
-      uploads.push({ path, name: driveName, kind, replaceId: inDrive ? inDrive.id : null, size: blob.size });
-    };
-    for (const id of Model.teamSongIds(t)) {
-      const s = Model.findSong(library, id);
-      if (!s) continue;
-      const name = s.path.replace(/^Songs\//, '');
-      await consider(s.path, name, remote.songFiles.get(name), 'song');
-    }
+    for (const s of t.songs) await this.consider(uploads, notOnDevice, s.path, Model.fileName(s.path), existing && existing.teamSongFiles.get(Model.fileName(s.path)), 'teamSongs');
     for (const p of t.players) {
       if (!p.intro || !p.intro.path) continue;
       const name = p.intro.path.replace(/^Announcements\//, '');
-      await consider(p.intro.path, name, clipFiles.get(name), 'clip');
+      await this.consider(uploads, notOnDevice, p.intro.path, name, existing && existing.clipFiles.get(name), 'clips');
     }
-    return { remote, team: t, existing, folderName, uploads, notOnDevice, firstTime: !existing, wasPublished: !!st,
+    // someone else published this team since this device last got it
+    const since = !!(existing && st && st.modifiedTime && st.modifiedTime !== existing.file.modifiedTime);
+    const needsCommon = Model.commonSongsMissing(t, library, remote.libData || { songs: [] });
+    return { kind: 'team', remote, team: t, existing, folderName, uploads, notOnDevice, firstTime: !existing, since, needsCommon,
       bytes: uploads.reduce((n, u) => n + u.size, 0) };
   },
 
   async publish(plan, { say = () => {}, meter = () => {} } = {}) {
     const { remote, team: t } = plan;
-    const root = remote.root.id;
-    // folders: Shared Songs, the team's folder and its Announcements
-    const songsFolder = remote.songsFolder || await this.createFolder(DRIVE.songsFolder, root);
-    const teamFolder = plan.existing ? plan.existing.folder : await this.createFolder(plan.folderName, root);
-    let clipsFolder = plan.existing && plan.existing.clipsFolder;
-    if (!clipsFolder && plan.uploads.some(u => u.kind === 'clip')) clipsFolder = await this.createFolder(DRIVE.clipsFolder, teamFolder.id);
+    let teamFolder = plan.existing ? plan.existing.folder : null;
+    const folderFor = () => teamFolder ? teamFolder : this.createFolder(plan.folderName, remote.root.id).then(f => (teamFolder = f));
+    let teamSongs = plan.existing && plan.existing.teamSongsFolder, clips = plan.existing && plan.existing.clipsFolder;
+    const folders = {
+      teamSongs: async () => teamSongs || (teamSongs = await this.createFolder(DRIVE.teamSongsFolder, (await folderFor()).id)),
+      clips: async () => clips || (clips = await this.createFolder(DRIVE.clipsFolder, (await folderFor()).id)),
+    };
     // the music first: if any of it fails, the team file isn't replaced, so nobody gets a
-    // layout pointing at songs that aren't there
-    let sent = 0, n = 0;
-    for (const u of plan.uploads) {
-      say(`Sending ${++n} of ${plan.uploads.length}: ${u.name}`);
-      const blob = await Store.audio.get(u.path);
-      const type = blob.type || 'audio/mpeg';
-      const r = u.replaceId ? await this.replace(u.replaceId, blob, type)
-        : await this.uploadNew(u.name, u.kind === 'song' ? songsFolder.id : clipsFolder.id, blob, type);
-      this.state.files[u.path] = { id: r.id, md5: r.md5Checksum || '', size: +r.size || blob.size };
-      sent += u.size;
-      meter(plan.bytes ? sent / plan.bytes : n / plan.uploads.length);
-    }
-    await this.save();
-    say('Sending the song list and the team…');
-    const json = obj => new Blob([JSON.stringify(obj, null, 1)], { type: 'application/json' });
-    const lib = Model.libraryForPublish(remote.libData, library, Model.teamSongIds(t));
-    if (remote.libFile) await this.replace(remote.libFile.id, json(lib), 'application/json');
-    else await this.uploadNew(DRIVE.libraryFile, root, json(lib), 'application/json');
+    // team pointing at songs that aren't there
+    await this.sendFiles(plan.uploads, folders, { say, meter, bytes: plan.bytes });
+    say('Sending the team…');
     const fileName = `${plan.folderName.replace(/\s+/g, '-')}.diamond.json`;
-    const r = plan.existing ? await this.replace(plan.existing.file.id, json(t), 'application/json')
-      : await this.uploadNew(fileName, teamFolder.id, json(t), 'application/json');
+    const r = plan.existing ? await this.replace(plan.existing.file.id, this.json2blob(t), 'application/json')
+      : await this.uploadNew(fileName, (await folderFor()).id, this.json2blob(t), 'application/json');
     this.state.teams[t.id] = {
-      folderId: teamFolder.id, folderName: teamFolder.name || plan.folderName, fileId: r.id, modifiedTime: r.modifiedTime || '',
+      folderId: (await folderFor()).id, folderName: teamFolder.name || plan.folderName, fileId: r.id, modifiedTime: r.modifiedTime || '',
       setupPrint: Model.setupPrint(t), lastSync: Date.now(),
     };
+    this.state.roles[t.id] = true;
     await this.save();
     return { sent: plan.uploads.length };
+  },
+
+  /* Publishing the common library (Diamond DJ Admin): every common song and moment on this device. */
+  async publishCommonPlan(say = () => {}) {
+    const remote = await this.scan(say);
+    if (!remote.editor) throw new Error('drive:noteditor');
+    const uploads = [], notOnDevice = [];
+    for (const s of library.songs) await this.consider(uploads, notOnDevice, s.path, Model.fileName(s.path), remote.songFiles.get(Model.fileName(s.path)), 'songs');
+    const st = this.state.library;
+    const since = !!(remote.libFile && st && st.modifiedTime && st.modifiedTime !== remote.libFile.modifiedTime);
+    const removed = remote.libData ? remote.libData.songs.filter(s => !Model.findSong(library, s.id)) : [];
+    return { kind: 'common', remote, uploads, notOnDevice, since, removed, firstTime: !remote.libFile, bytes: uploads.reduce((n, u) => n + u.size, 0) };
+  },
+
+  async publishCommon(plan, { say = () => {}, meter = () => {} } = {}) {
+    const { remote } = plan;
+    let songs = remote.songsFolder;
+    await this.sendFiles(plan.uploads, { songs: async () => songs || (songs = await this.createFolder(DRIVE.songsFolder, remote.root.id)) }, { say, meter, bytes: plan.bytes });
+    say('Sending the common library…');
+    const r = remote.libFile ? await this.replace(remote.libFile.id, this.json2blob(library), 'application/json')
+      : await this.uploadNew(DRIVE.libraryFile, remote.root.id, this.json2blob(library), 'application/json');
+    this.state.library = { fileId: r.id, modifiedTime: r.modifiedTime || '', print: Model.fingerprint(library), lastSync: Date.now() };
+    await this.save();
+    return { sent: plan.uploads.length };
+  },
+
+  /* Has this device changed the common library since it last synced? */
+  commonEdits() {
+    const st = this.state.library;
+    return st && st.print ? Model.fingerprint(library) !== st.print : null;
   },
 
   /* Has this device changed the team since it last synced (or never synced it)? */
