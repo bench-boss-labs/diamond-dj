@@ -40,7 +40,7 @@ First team: U13 Burlington Bees. Design spec and mockups live in the claude.ai p
 - **Help** (the ? at the top, open even when locked): game-day checklist, common questions, a
   section for organizers, **What's new** and **App history**, and a link to the **full guide**
   (`guide/`, a separate page that also works offline).
-- **Install** (Settings › This device): one tap where Chrome offers it, otherwise the steps for
+- **Install** (top of Settings): one tap where Chrome offers it, otherwise the steps for
   that device (Android, Samsung Internet, iPad/iPhone, computer).
 - **New versions**: "A new version is ready" with what's in it, Update now and Later, shown only
   when nothing is playing. Quiet releases switch over by themselves. Once after an update:

@@ -714,6 +714,9 @@ function openSettings() {
   const row = (label, key, min, max, step, fmt) => `<div class="setting"><span>${label}</span>
     <input type="range" data-set="${key}" min="${min}" max="${max}" step="${step}" value="${settings[key]}" aria-label="${esc(label)}"><output data-out="${key}">${fmt(settings[key])}</output></div>`;
   openDialog('Settings', `
+    <h3>App</h3>
+    <div class="row"><span class="hint">Diamond DJ ${esc(versionText())}</span><button class="btn small" id="setHelp">Help and what's new</button></div>
+    <div id="installBox" class="stack"></div>
     <h3>Google Drive</h3>
     <div id="driveBox" class="stack"></div>
     <h3>Team</h3>
@@ -736,9 +739,7 @@ function openSettings() {
     <p class="hint">A made-up team of nine with test tones for songs and chimes for announcements. Replaces the players and lineups on this device.</p>
     <div class="row"><button class="btn" id="setDemo">Load the demo team</button></div>
     <h3>This device</h3>
-    <div id="installBox" class="stack"></div>
-    <p class="hint" id="setStorage">Checking storage…</p>
-    <div class="row"><span class="hint">Diamond DJ ${esc(versionText())}</span><button class="btn small" id="setHelp">Help and what's new</button></div>`, () => render());
+    <p class="hint" id="setStorage">Checking storage…</p>`, () => render());
 
   paintDrive();
   paintInstall();
@@ -1707,7 +1708,7 @@ function openHelp(section) {
     ${q('A key moment button does nothing.', `<p>It has no songs yet. Add songs to it on the <b>Moments</b> screen (unlock first). A tap on a playing button fades it out.</p>`)}
     ${q('Roster, Songs, Moments and Settings are gone.', `<p>The app is locked. Press and hold the lock button at the top for a second and a half.</p>`)}
     ${q('The screen turns off during the game.', `<p>Diamond DJ keeps the screen on while it's open where the device allows. If it still turns off: <b>Android:</b> Settings › Display › Screen timeout › the longest time. <b>iPad / iPhone:</b> Settings › Display &amp; Brightness › Auto-Lock › Never.</p>`)}
-    ${q('How do I put it on the home screen?', `<p><b>Settings › This device › Install Diamond DJ</b>. If your device can't do it in one tap, it shows you the steps. Then always open it from the Bees icon.</p>`)}
+    ${q('How do I put it on the home screen?', `<p><b>Settings › Install Diamond DJ</b> (at the top). If your device can't do it in one tap, it shows you the steps. Then always open it from the Bees icon.</p>`)}
     ${q('It says “A new version of Diamond DJ is ready”.', `<p>Tap <b>Update now</b> when nothing is playing. Your teams, lineups and songs stay. <b>Later</b> keeps this version until the app is opened again. Small fixes install by themselves; the screen may blink for a second.</p>`)}
     ${q('The wrong team is showing.', `<p>Tap the team name at the top left and pick your team. Missing? Tap <b>Settings › Check for updates</b> and tick it.</p>`)}
     ${q('Will Check for updates undo my lineup?', `<p>No. A lineup changed on this device is kept. Roster and moment changes made on this device are flagged first, so you can choose to keep them.</p>`)}
