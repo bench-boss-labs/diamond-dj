@@ -26,7 +26,7 @@ with sync_playwright() as p:
     page.wait_for_selector('.empty')
     check('empty team shows the Roster prompt', 'No players yet' in page.inner_text('#main'))
 
-    page.click('[data-act="load-demo"]')
+    page.evaluate('loadDemo()')
     page.wait_for_selector('.upnext', timeout=15000)
     check('demo loads with Olivia up next', 'Olivia Brooks' in page.inner_text('.upnext'))
     page.screenshot(path=f'{OUT}/game-tablet.png')
@@ -79,7 +79,13 @@ with sync_playwright() as p:
     page.click('#dlgClose')
 
     # Lineup screen: duplicate and switch
-    page.click('.tabs [data-view="lineup"]')
+    page.click('#settingsBtn'); page.wait_for_selector('[data-go="lineup"]')
+    check('Settings: Manage first, then Updates, Sound, This device, Advanced; no demo team',
+          page.locator('.manage-row').count() == 3 and page.eval_on_selector_all('.set-group', 'g => g.map(x => x.dataset.group).join()') == 'updates,sound,device,advanced'
+          and 'demo' not in page.inner_text('#dlgBody').lower())
+    page.screenshot(path=f'{OUT}/settings.png')
+    page.click('[data-go="lineup"]')
+    check('Game screen header has no tabs; Lineups has a way back', page.evaluate("document.querySelector('#nav .ws-back') !== null"))
     page.click('[data-act="lu-dup"]'); page.fill('#askInput', 'Doubleheader'); page.click('#askOk')
     page.wait_for_selector('.lineup-title:has-text("Doubleheader")')
     check('duplicate lineup', 'Doubleheader' in page.inner_text('#main'))
@@ -88,7 +94,7 @@ with sync_playwright() as p:
     page.screenshot(path=f'{OUT}/lineup.png')
 
     # Roster: add a player, type a name
-    page.click('.tabs [data-view="roster"]')
+    page.evaluate("go('roster')")
     page.click('[data-act="player-add"]')
     page.fill('[data-pf="first"]', 'Nora'); page.fill('[data-pf="last"]', 'Patel'); page.fill('[data-pf="number"]', '6')
     check('new player shows in the roster list', 'Nora Patel' in page.inner_text('#rosterList'))
@@ -110,7 +116,7 @@ with sync_playwright() as p:
 
     # ---------------------------------------------------------------- Phase 2: key moments
     page.click('#stopAll')
-    page.click('.tabs [data-view="game"]')
+    page.evaluate("go('game')")
     page.wait_for_selector('.pad')
     check('game shows 8 key moments and 4 breaks', page.locator('.pad').count() == 12)
     page.click('.pad[data-id="demo_m1"]'); time.sleep(0.8)
@@ -140,7 +146,7 @@ with sync_playwright() as p:
     check('New game clears the played songs', page.evaluate("game.played.length") == 0)
 
     # Admin › Common moments (the demo's moments are common; Pitcher Warmup is the team's own)
-    page.click('#nav [data-view="csongs"]')
+    page.evaluate("go('csongs')")
     page.click('.tabs [data-view="cmoments"]')
     page.click('[data-act="pick-moment"][data-id="demo_m4"]')
     page.click('[data-act="m-add-songs"]')
@@ -163,7 +169,7 @@ with sync_playwright() as p:
     check('delete a moment (tap twice)', not page.evaluate("library.moments.some(m => m.name === 'Pitching Change')"))
 
     # Songs editor: moments chips
-    page.click('.tabs [data-view="csongs"]')
+    page.evaluate("go('csongs')")
     page.click('[data-act="pick-song"][data-id="demo_s3"]')
     page.click('[data-act="sm-add"]'); page.click('#togList [data-tog="demo_m8"]'); page.click('#dlgClose')
     check('add a song to a moment from Songs', 'demo_s3' in page.evaluate("Model.findMoment(library, 'demo_m8').songIds"))
@@ -173,14 +179,14 @@ with sync_playwright() as p:
     # Lock
     page.click('#lockBtn')
     check('Lock goes to Game and hides setup and settings',
-          page.evaluate("ui.view") == 'game' and not page.is_visible('.ws-btn') and not page.is_visible('#settingsBtn') and page.is_visible('[data-view="lineup"]'))
-    page.click('.tabs [data-view="lineup"]')
+          page.evaluate("ui.view") == 'game' and not page.is_visible('#settingsBtn') and page.is_visible('[data-act="edit-order"]'))
+    page.evaluate("go('lineup')")
     check('Lineup still works when locked', page.evaluate("ui.view") == 'lineup')
     page.click('#lockBtn'); time.sleep(0.3)
     check('a quick tap does not unlock', page.evaluate("settings.locked") is True)
     lb = page.locator('#lockBtn').bounding_box()
     page.mouse.move(lb['x'] + 10, lb['y'] + 10); page.mouse.down(); time.sleep(1.7); page.mouse.up()
-    check('press and hold unlocks', page.evaluate("settings.locked") is False and page.is_visible('.ws-btn'))
+    check('press and hold unlocks', page.evaluate("settings.locked") is False and page.is_visible('#settingsBtn'))
     page.click('#lockBtn')  # leave it locked to check it survives a reload
 
     # reload: everything persisted
@@ -209,7 +215,7 @@ with sync_playwright() as p:
     dock_h = ph.evaluate("Math.round(document.querySelector('.dock').getBoundingClientRect().height)")
     check(f'phone: now-playing bar is one row ({dock_h}px)', dock_h <= 72)
     # P2: lineup dropdown, menu, rows without arrows
-    ph.click('.tabs [data-view="lineup"]')
+    ph.evaluate("go('lineup')")
     check('phone lineup: dropdown and menu instead of the side list', ph.is_visible('#luSelect') and ph.is_visible('[data-act="lu-menu"]') and not ph.is_visible('[data-act="lu-pick"]'))
     check('phone lineup: no arrow buttons, Bench stays', not ph.is_visible('[data-act="lu-up"]') and ph.locator('[data-act="lu-bench"]').first.is_visible())
     ph.select_option('#luSelect', label='Tournament')
@@ -220,7 +226,7 @@ with sync_playwright() as p:
     check('phone lineup: Rename from the menu', ph.evaluate("Model.findLineup(team, ui.lineupId).name") == 'Tourney')
     ph.screenshot(path=f'{OUT}/p2-lineup.png')
     # P4/P5: roster list, then the player full screen, then back
-    ph.click('.tabs [data-view="roster"]')
+    ph.evaluate("go('roster')")
     check('phone roster: list only', ph.is_visible('#rosterList') and not ph.is_visible('[data-pf="first"]'))
     ph.screenshot(path=f'{OUT}/p4-roster.png')
     ph.click('[data-act="pick-player"][data-id="demo_p4"]')
@@ -230,7 +236,7 @@ with sync_playwright() as p:
     ph.click('.back-btn')
     check('phone roster: Back returns to the list', ph.is_visible('#rosterList'))
     # P6: songs list, clip editor
-    ph.click('.tabs [data-view="game"]'); ph.click('#nav [data-view="csongs"]')
+    ph.evaluate("go('game')"); ph.evaluate("go('csongs')")
     ph.click('[data-act="pick-song"][data-id="demo_s1"]')
     ph.wait_for_function("document.querySelector('#waveMsg') && document.querySelector('#waveMsg').hidden", timeout=10000)
     grid = ph.evaluate("getComputedStyle(document.querySelector('.clip-btns')).gridTemplateColumns.split(' ').length")
@@ -249,7 +255,7 @@ with sync_playwright() as p:
     ph.screenshot(path=f'{OUT}/p7-settings.png')
     ph.click('#dlgClose')
     check('phone: no sideways scrolling anywhere', ph.evaluate("document.documentElement.scrollWidth <= innerWidth + 1"))
-    ph.click('.tabs [data-view="game"]')
+    ph.evaluate("go('game')")
     ph.click('[data-act="edit-order"]'); time.sleep(0.3)
     ph.screenshot(path=f'{OUT}/p3-editorder.png')
     ph.click('#dlgClose')

@@ -1,5 +1,27 @@
 [
   {
+    "version": "0.7.0",
+    "date": "2026-11-17",
+    "notes": [
+      {
+        "type": "improved",
+        "text": "A simpler Game screen on phones and tablets: just the team, Lock, Help and Settings across the top. Everything for playing music stays on the Game screen."
+      },
+      {
+        "type": "new",
+        "text": "Settings › Manage: Lineups, Team setup and Admin (for those roles) are now at the top of Settings."
+      },
+      {
+        "type": "improved",
+        "text": "Settings is grouped into Updates, Sound, This device and Advanced. Tap a group to open it."
+      },
+      {
+        "type": "improved",
+        "text": "The demo team is gone from Settings, and New game lives on the Game screen only."
+      }
+    ]
+  },
+  {
     "version": "0.6.0",
     "date": "2026-11-17",
     "notes": [

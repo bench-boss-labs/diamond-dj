@@ -28,6 +28,7 @@ const DEFAULTS = {
   masterVolume: 1,
   locked: false,       // Lock: hides setup screens and settings on this device
   viewAs: null,        // Diamond DJ Admin trying another role's screens: 'organizer' | 'volunteer'
+  openGroup: 'updates', // the Settings group left open last time
 };
 
 let teams = {};          // every team on this device, by id
@@ -260,7 +261,7 @@ function walkupsHtml() {
   const l = lineup();
   if (!team.players.length) {
     return `<div class="empty"><p><b>No players yet.</b></p><p>Add the team in Roster, or try the app with the demo team.</p>
-      <div class="row" style="justify-content:center">${settings.locked || !canTeam() ? '' : '<button class="btn primary" data-act="go" data-view="roster">Set up the roster</button><button class="btn" data-act="load-demo">Load the demo team</button>'}</div></div>`;
+      <div class="row" style="justify-content:center">${settings.locked || !canTeam() ? '' : '<button class="btn primary" data-act="go" data-view="roster">Set up the roster</button>'}</div></div>`;
   }
   const { first, tags } = batterTags(l);
   const p = player(first);
@@ -747,43 +748,56 @@ async function deleteSong(s) {
 function openSettings() {
   const row = (label, key, min, max, step, fmt) => `<div class="setting"><span>${label}</span>
     <input type="range" data-set="${key}" min="${min}" max="${max}" step="${step}" value="${settings[key]}" aria-label="${esc(label)}"><output data-out="${key}">${fmt(settings[key])}</output></div>`;
+  // Manage (by role) first, then four groups that open and close: Updates, Sound, This device, Advanced
+  const teamDirty = Drive.localEdits(team) !== false && (team.players.length || team.songs.length || team.moments.length);
+  const commonDirty = !!Drive.commonEdits() || (Drive.commonEdits() === null && library.songs.length > 0);
+  const manageRow = (view, icon, title, sub, dot) => `<button class="manage-row" data-go="${view}">
+      <span class="manage-icon">${icon}</span><span class="grow"><b>${title}</b><span class="sub">${sub}</span>${dot ? `<span class="manage-dot">${dot}</span>` : ''}</span>
+      <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>`;
+  const group = (key, title, summary, body) => `<details class="set-group" data-group="${key}" ${(settings.openGroup || 'updates') === key ? 'open' : ''}>
+      <summary><span class="grow"><b>${title}</b><span class="sub">${summary}</span></span><span class="plus" aria-hidden="true"></span></summary>
+      <div class="set-body">${body}</div></details>`;
+  const when = Drive.state.lastCheck ? new Date(Drive.state.lastCheck).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '';
+  const ICON_LINEUPS = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>';
   openDialog('Settings', `
-    <h3>App</h3>
-    <div class="row"><span class="hint">Diamond DJ ${esc(versionText())}</span><button class="btn small" id="setHelp">Help and what's new</button></div>
-    <div id="installBox" class="stack"></div>
-    <h3>Google Drive</h3>
-    <div id="driveBox" class="stack"></div>
-    <h3>Your role</h3>
-    <p>${realRole() === role() ? '' : 'Really '}<b>${ROLE_NAME[realRole()]}</b>${realRole() === 'admin' ? '' : ` for ${esc(team.name)}`}${Drive.state.account ? ` <span class="hint">· ${esc(Drive.state.account)}</span>` : ''}</p>
-    <p class="hint">${!Drive.state.lastCheck ? 'This device hasn’t checked Google Drive yet, so everything can be set up here. Roles come from Drive sharing once you check for updates.'
-      : realRole() === 'admin' ? 'You can change the common library and every team.' : realRole() === 'organizer' ? `You can change and publish ${esc(team.name)}. The common songs and moments come from the Diamond DJ Admin.` : 'You run the music. To change the roster, songs or moments, ask your team organizer.'}</p>
-    ${RANK[realRole()] >= 1 ? `<label class="field">View as (to try another role’s screens on this device)<select id="setViewAs">
-      <option value="">Myself: ${ROLE_NAME[realRole()]}</option>${realRole() === 'admin' ? `<option value="organizer" ${settings.viewAs === 'organizer' ? 'selected' : ''}>Team organizer</option>` : ''}
-      <option value="volunteer" ${settings.viewAs === 'volunteer' ? 'selected' : ''}>Volunteer</option></select></label>` : ''}
-    <p class="hint">Switch teams, or add one, with the team button at the top left.</p>
-    <h3>Game</h3>
-    <div class="row"><button class="btn" id="setNewGame">New game (start from batter 1)</button></div>
-    <h3>Playback</h3>
-    ${row('Fade-out length', 'fadeSeconds', 0.5, 8, 0.5, v => v + ' s')}
-    ${row('Walk-up length when a song has no stop point', 'walkupSeconds', 5, 30, 1, v => v + ' s')}
-    ${row('Song volume under the announcement', 'duckLevel', 0, 0.6, 0.05, v => Math.round(v * 100) + '%')}
-    ${row('Song comes up after the announcement over', 'riseSeconds', 0.2, 3, 0.1, v => (+v).toFixed(1) + ' s')}
-    ${row('Playlist songs overlap by', 'playlistXfade', 0, 10, 0.5, v => v + ' s')}
-    <h3>Back up</h3>
-    <p class="hint">Saves the roster, lineups, song names and cut points in a small file. The music isn’t in it: keep your MP3s and announcement clips too.</p>
-    <div class="row"><button class="btn" id="setSave">Save a backup file</button>
-      <label class="btn file-btn">Open a backup file<input type="file" accept=".json,application/json" id="setOpen"></label></div>
-    <h3>Try it out</h3>
-    <p class="hint">A made-up team of nine with test tones for songs and chimes for announcements. Replaces the players and lineups on this device.</p>
-    <div class="row"><button class="btn" id="setDemo">Load the demo team</button></div>
-    <h3>This device</h3>
-    <p class="hint" id="setStorage">Checking storage…</p>`, () => render());
+    <div class="manage">
+      <span class="section-title">Manage</span>
+      ${manageRow('lineup', ICON_LINEUPS, 'Lineups', `${esc(lineup().name)} is in use · ${team.lineups.length} saved`)}
+      ${canTeam() ? manageRow('roster', ICON_TEAM, 'Team setup', `${esc(team.short || team.name)}: roster, walk-ups, team songs, moments`, teamDirty ? 'Changes to publish' : '') : ''}
+      ${canAdmin() ? manageRow('csongs', ICON_ADMIN, 'Admin', 'Common songs and moments for every team', commonDirty ? 'Changes to publish' : '') : ''}
+    </div>
+    <span class="section-title">Settings</span>
+    ${group('updates', 'Updates', when ? `Last checked ${esc(when)}` : 'Get the roster and songs from Google Drive', `<div id="driveBox" class="stack"></div>
+      <p class="hint">On this device you’re <b>${ROLE_NAME[role()]}</b>${settings.viewAs ? ' (View as, under Advanced)' : ''}${Drive.state.account ? ` · ${esc(Drive.state.account)}` : ''}.
+      ${!Drive.state.lastCheck ? 'Everything can be set up here until this device checks Google Drive; roles come from Drive sharing after that.' : ''}</p>`)}
+    ${group('sound', 'Sound', 'Fades, walk-up length, the announcement mix', `
+      ${row('Fade-out length', 'fadeSeconds', 0.5, 8, 0.5, v => v + ' s')}
+      ${row('Walk-up length when a song has no stop point', 'walkupSeconds', 5, 30, 1, v => v + ' s')}
+      ${row('Song volume under the announcement', 'duckLevel', 0, 0.6, 0.05, v => Math.round(v * 100) + '%')}
+      ${row('Song comes up after the announcement over', 'riseSeconds', 0.2, 3, 0.1, v => (+v).toFixed(1) + ' s')}
+      ${row('Playlist songs overlap by', 'playlistXfade', 0, 10, 0.5, v => v + ' s')}`)}
+    ${group('device', 'This device', `${installed() ? 'Installed' : 'Not installed'} · version ${esc(window.APP_VERSION || '')}`, `
+      <div id="installBox" class="stack"></div>
+      <p class="hint" id="setStorage">Checking storage…</p>
+      <div class="row"><span class="hint">Diamond DJ ${esc(versionText())}</span><button class="btn small" id="setHelp">Help and what's new</button></div>`)}
+    ${group('advanced', 'Advanced', 'View as, backup', `
+      ${RANK[realRole()] >= 1 ? `<label class="field">View as (try another role’s screens on this device)<select id="setViewAs">
+        <option value="">Myself: ${ROLE_NAME[realRole()]}</option>${realRole() === 'admin' ? `<option value="organizer" ${settings.viewAs === 'organizer' ? 'selected' : ''}>Team organizer</option>` : ''}
+        <option value="volunteer" ${settings.viewAs === 'volunteer' ? 'selected' : ''}>Volunteer</option></select></label>` : ''}
+      <p class="hint">A backup file has the roster, lineups, song names and cut points (not the music).</p>
+      <div class="row"><button class="btn" id="setSave">Save a backup</button>
+        <label class="btn file-btn">Open a backup<input type="file" accept=".json,application/json" id="setOpen"></label></div>`)}`, () => render());
 
+  for (const d of document.querySelectorAll('.set-group')) d.addEventListener('toggle', () => {
+    if (!d.open) return;
+    settings.openGroup = d.dataset.group; saveSettings();
+    for (const o of document.querySelectorAll('.set-group')) if (o !== d) o.open = false;
+  });
+  for (const b of document.querySelectorAll('[data-go]')) b.onclick = () => { const v = b.dataset.go; closeDialog(); go(v); };
   paintDrive();
   paintInstall();
   $('#setHelp').onclick = () => openHelp('news');
-  if ($('#setViewAs')) $('#setViewAs').onchange = e => { settings.viewAs = e.target.value || null; saveSettings(); closeDialog(); toast(settings.viewAs ? `Viewing as ${ROLE_NAME[settings.viewAs]}. Change it back in Settings.` : 'Back to your own role.'); };
-  $('#setNewGame').onclick = e => { if (!armed(e.currentTarget, 'Tap again: start from batter 1')) return; newGame(); };
+  if ($('#setViewAs')) $('#setViewAs').onchange = e => { settings.viewAs = e.target.value || null; saveSettings(); closeDialog(); toast(settings.viewAs ? `Viewing as ${ROLE_NAME[settings.viewAs]}. Change it back in Settings › Advanced.` : 'Back to your own role.'); };
   for (const r of document.querySelectorAll('[data-set]')) {
     r.oninput = () => {
       const k = r.dataset.set;
@@ -796,7 +810,6 @@ function openSettings() {
   }
   $('#setSave').onclick = saveBackup;
   $('#setOpen').onchange = e => openBackup(e.target.files[0]);
-  $('#setDemo').onclick = e => { if (team.players.length && !armed(e.currentTarget, 'Tap again: replace this team')) return; loadDemo(); };
   Store.usage().then(u => {
     const el = $('#setStorage'); if (!el) return;
     el.textContent = `${stored.size} audio file${stored.size === 1 ? '' : 's'} on this device` +
@@ -1233,7 +1246,7 @@ function paintDrive() {
         <button class="btn" id="drvSwitch">Switch Google account</button></div>
       ${dui.note ? `<p class="hint">${esc(dui.note)}</p>` : ''}
       <p class="hint">${when ? `Last checked ${esc(when)}` : 'Not checked yet on this device'}${Drive.state.account ? ` · ${esc(Drive.state.account)}` : ''}</p>
-      ${canTeam() ? `<p class="hint">To send changes to everyone: <b>${canAdmin() ? 'Team › Publish, or Admin › Publish' : 'Team › Publish'}</b>.</p>` : ''}
+      ${canTeam() ? `<p class="hint">To send changes to everyone: <b>${canAdmin() ? 'Settings › Team setup › Publish, or Settings › Admin › Publish' : 'Settings › Team setup › Publish'}</b>.</p>` : ''}
       ${conn}`;
     $('#drvCheck').onclick = startCheck;
     $('#drvSwitch').onclick = () => { Auth.forget(); Auth.signIn('check', { chooseAccount: true }); };
@@ -1358,6 +1371,7 @@ function renderNav() {
   const ws = TEAM_VIEWS.includes(ui.view) ? 'team' : ADMIN_VIEWS.includes(ui.view) ? 'admin' : '';
   document.body.classList.toggle('ws-team', ws === 'team');
   document.body.classList.toggle('ws-admin', ws === 'admin');
+  document.body.classList.toggle('ws-lineup', ui.view === 'lineup');
   const tab = (v, label, badge) => `<button data-view="${v}"${ui.view === v ? ' aria-current="page"' : ''}>${label}${badge ? '<span class="tab-dot" aria-label="not published"></span>' : ''}</button>`;
   const teamDirty = Drive.localEdits(team) !== false && (team.players.length || team.songs.length || team.moments.length);
   const commonDirty = !!Drive.commonEdits() || (Drive.commonEdits() === null && library.songs.length > 0);
@@ -1368,9 +1382,10 @@ function renderNav() {
   else if (ws === 'admin') html = `<button class="ws-back" data-view="game"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>Game</button>
     <div class="tab-group"><span class="group-label in-game">Diamond DJ Admin · all teams</span><div class="group game ws-tabs">
       ${tab('csongs', 'Common songs')}${tab('cmoments', 'Common moments')}${tab('cpublish', 'Publish', commonDirty)}</div></div>`;
-  else html = `<div class="tab-group"><span class="group-label in-game">In game</span><div class="group game">${tab('game', 'Game')}${tab('lineup', 'Lineup')}</div></div>
-    ${canTeam() ? `<button class="ws-btn" data-view="roster" aria-label="Team: set up ${esc(team.short || team.name)}">${ICON_TEAM}<span>Team</span>${teamDirty ? '<span class="tab-dot"></span>' : ''}</button>` : ''}
-    ${canAdmin() ? `<button class="ws-btn admin" data-view="csongs" aria-label="Admin: the common library">${ICON_ADMIN}<span>Admin</span>${commonDirty ? '<span class="tab-dot"></span>' : ''}</button>` : ''}`;
+  else if (ui.view === 'lineup') html = `<button class="ws-back" data-view="game"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>Game</button>
+    <span class="ws-title">Lineups</span>`;
+  // the Game screen: nothing here. Lineups, Team and Admin are in Settings › Manage
+  else html = '';
   $('#nav').innerHTML = html;
 }
 
@@ -1886,19 +1901,19 @@ function openHelp(section) {
     <h3>Common questions</h3>
     ${q('Nothing plays.', `<p>Check the tablet's volume, the <b>Volume</b> slider at the bottom, and that the speaker is connected. A batter marked <b>Not ready</b> has no announcement or song on this device yet: tap <b>Settings › Check for updates</b> on wifi.</p>`)}
     ${q('A batter says “No announcement”.', `<p>Their song still plays, with no announcement first. The clip is added in <b>Roster</b> (tap the player, then <b>Choose a clip</b>), or comes with <b>Check for updates</b> once the organizer publishes it.</p>`)}
-    ${q('The batting order changed (someone is late, sick or leaving early).', `<p>On <b>Game</b>, tap <b>Edit order</b>: drag a batter to move them, or tap <b>Bench</b> to take them out (and <b>Add back</b> when they arrive). It saves as you go. Saved lineups for other games are on the <b>Lineup</b> screen.</p>`)}
+    ${q('The batting order changed (someone is late, sick or leaving early).', `<p>On <b>Game</b>, tap <b>Edit order</b>: drag a batter to move them, or tap <b>Bench</b> to take them out (and <b>Add back</b> when they arrive). It saves as you go. Saved lineups for other games are in <b>Settings › Lineups</b>.</p>`)}
     ${q('The wrong song or player played.', `<p>Tap <b>Fade out</b>, then tap the right batter in the list. To put the order back where it should be, press and hold the batter who should be up next.</p>`)}
     ${q('A key moment button does nothing.', `<p>It has no songs yet. Add songs to it on the <b>Moments</b> screen (unlock first). A tap on a playing button fades it out.</p>`)}
     ${q('Roster, Songs, Moments and Settings are gone.', `<p>The app is locked. Press and hold the lock button at the top for a second and a half.</p>`)}
     ${q('The screen turns off during the game.', `<p>Diamond DJ keeps the screen on while it's open where the device allows. If it still turns off: <b>Android:</b> Settings › Display › Screen timeout › the longest time. <b>iPad / iPhone:</b> Settings › Display &amp; Brightness › Auto-Lock › Never.</p>`)}
-    ${q('How do I put it on the home screen?', `<p><b>Settings › Install Diamond DJ</b> (at the top). If your device can't do it in one tap, it shows you the steps. Then always open it from the Bees icon.</p>`)}
+    ${q('How do I put it on the home screen?', `<p><b>Settings › This device › Install Diamond DJ</b>. If your device can't do it in one tap, it shows you the steps. Then always open it from the Bees icon.</p>`)}
     ${q('It says “A new version of Diamond DJ is ready”.', `<p>Tap <b>Update now</b> when nothing is playing. Your teams, lineups and songs stay. <b>Later</b> keeps this version until the app is opened again. Small fixes install by themselves; the screen may blink for a second.</p>`)}
     ${q('The wrong team is showing.', `<p>Tap the team name at the top left and pick your team. Missing? Tap <b>Settings › Check for updates</b> and tick it.</p>`)}
     ${q('Will Check for updates undo my lineup?', `<p>No. A lineup changed on this device is kept. Roster and moment changes made on this device are flagged first, so you can choose to keep them.</p>`)}
 
     <div ${Drive.state.editor ? '' : 'hidden'}>
     <h3>For organizers</h3>
-    ${q('How do I send changes to every device?', `<p><b>Team › Publish</b> (and, for the common songs and moments, <b>Admin › Publish</b>). It lists what will be sent (new songs, announcement clips, the team file) before anything goes. Volunteers get it the next time they tap <b>Check for updates</b>. Nothing in Drive is deleted, and Drive keeps earlier versions.</p>`)}
+    ${q('How do I send changes to every device?', `<p><b>Settings › Team setup › Publish</b> (and, for the common songs and moments, <b>Settings › Admin › Publish</b>). It lists what will be sent (new songs, announcement clips, the team file) before anything goes. Volunteers get it the next time they tap <b>Check for updates</b>. Nothing in Drive is deleted, and Drive keeps earlier versions.</p>`)}
     ${q('How do I add a volunteer?', `<p>Share the <b>Diamond DJ</b> Google Drive folder with their Google account as <b>Viewer</b> (or <b>Editor</b> for someone who will publish). While the app is in testing, also add them in Google Cloud (Diamond DJ project › Google Auth Platform › Audience › <b>Test users</b>).</p>`)}
     ${q('How do I add a song or set where it starts?', `<p><b>Songs › Add songs</b> and pick MP3s. Tap a song, play it, then <b>Set start here</b> at the catchy part and <b>Set stop here</b> where it should end. Link it to a player in <b>Roster</b>, then publish.</p>`)}
     </div>

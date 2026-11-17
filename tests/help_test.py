@@ -70,7 +70,7 @@ with sync_playwright() as pw:
     page.evaluate("setLocked(false)")
 
     # ------------------------------------------------ Install (headless Chromium never offers the prompt: steps instead)
-    page.click('#settingsBtn'); page.wait_for_selector('#setInstall')
+    page.click('#settingsBtn'); page.click('[data-group="device"] summary'); page.wait_for_selector('#setInstall')
     check('Settings: Install button and version', visible(page, '#setInstall') and 'Version ' in page.inner_text('#dlgBody'))
     page.click('#setInstall')
     check('no install prompt: shows the steps', visible(page, '.install-steps'))
@@ -85,7 +85,7 @@ with sync_playwright() as pw:
     page.click('#dlgClose')
 
     # ------------------------------------------------ a new version: banner, waits while playing
-    page.click('[data-act="load-demo"]'); page.wait_for_selector('.upnext')
+    page.evaluate('loadDemo()'); page.wait_for_selector('.upnext')
     page.click('[data-act="walkup"]'); time.sleep(0.5)
     release('9.9.0', 'A pretend fix for the test.')
     page.evaluate("navigator.serviceWorker.getRegistration().then(r => r.update())")

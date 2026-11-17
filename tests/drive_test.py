@@ -52,7 +52,7 @@ with sync_playwright() as p:
 
     # ------------------------------------------------------------ the Diamond DJ Admin publishes the common library, then the team
     org = device(b, 'organizer')
-    org.click('[data-act="load-demo"]'); org.wait_for_selector('.upnext')
+    org.evaluate('loadDemo()'); org.wait_for_selector('.upnext')
     drive_box(org)
     check('Drive section offers the first download', 'Download from Google Drive' in org.inner_text('#driveBox'))
     account('organizer')
@@ -60,7 +60,7 @@ with sync_playwright() as p:
     signin_and_wait(org, '#driveBox:has-text("no teams in the Drive folder")')
     check('after sign-in the app comes back and checks: no teams yet', True)
     org.click('#drvCancel'); org.click('#dlgClose')
-    check('Diamond DJ Admin sees Team and Admin', org.is_visible('#nav [data-view="roster"]') and org.is_visible('#nav [data-view="csongs"]'))
+    check('Diamond DJ Admin sees Team and Admin', org.evaluate('canTeam()') and org.evaluate('canAdmin()'))
     def publish(page, view, expect=None):
         page.evaluate(f"go('{view}')")
         page.click('#pubStart')
@@ -94,7 +94,7 @@ with sync_playwright() as p:
     check('the empty starter team made way', vol.evaluate("Object.keys(teams).length") == 1)
     check('all 14 files stored', vol.evaluate("['Songs/Test Song 1 - Diamond DJ.mp3','Announcements/demo-8.mp3'].every(p => stored.has(p)) && stored.size") == 14)
     vol.click('#dlgClose')
-    check('volunteer: no Team or Admin, only Game and Lineup', vol.evaluate("role()") == 'volunteer' and not vol.is_visible('#nav [data-view="roster"]') and not vol.is_visible('#nav [data-view="csongs"]'))
+    check('volunteer: no Team or Admin, only Game and Lineup', vol.evaluate("role()") == 'volunteer' and not vol.evaluate('canTeam()') and not vol.evaluate('canAdmin()'))
     vol.evaluate("go('roster')")
     check('volunteer: the Team screen is out of reach', vol.evaluate("ui.view") == 'game')
     vol.click('[data-act="walkup"]'); time.sleep(1)
@@ -141,9 +141,9 @@ with sync_playwright() as p:
     account('coach')
     coach.click('#drvCheck'); signin_and_wait(coach, '#drvGo'); coach.click('#drvGo'); signin_and_wait(coach, '#driveBox:has-text("Up to date")')
     coach.click('#dlgClose')
-    check('team organizer: Team, but no Admin', coach.evaluate("role()") == 'organizer' and coach.is_visible('#nav [data-view="roster"]') and not coach.is_visible('#nav [data-view="csongs"]'))
+    check('team organizer: Team, but no Admin', coach.evaluate("role()") == 'organizer' and coach.evaluate('canTeam()') and not coach.evaluate('canAdmin()'))
     # a team song (pitcher music), published to the team's own Team Songs folder
-    coach.evaluate("go('songs')")
+    coach.evaluate("go('songs')"); time.sleep(0.6)
     coach.set_input_files('[data-act="songs-add"]', os.path.join(ROOT, 'demo', 'test-song-1.mp3') if os.path.exists(os.path.join(ROOT, 'demo', 'test-song-1.mp3')) else [f for f in [os.path.join(ROOT, 'demo', x) for x in sorted(os.listdir(os.path.join(ROOT, 'demo')))] if f.endswith('.mp3')][0])
     coach.wait_for_function("team.songs.length === 1", timeout=8000)
     check('the new song is a team song', coach.evaluate("team.songs[0].path.startsWith('Teams/demo_team/') && !library.songs.some(s => s.id === team.songs[0].id)"))
@@ -161,9 +161,9 @@ with sync_playwright() as p:
     check('volunteer gets the team song', vol.evaluate("team.songs.length === 1 && stored.has(team.songs[0].path)"))
     # View as (the Admin trying the other roles)
     org.evaluate("settings.viewAs = 'volunteer'; render()")
-    check('View as Volunteer hides Team and Admin', not org.is_visible('#nav [data-view="roster"]') and not org.is_visible('#nav [data-view="csongs"]'))
+    check('View as Volunteer hides Team and Admin', not org.evaluate('canTeam()') and not org.evaluate('canAdmin()'))
     org.evaluate("settings.viewAs = 'organizer'; render()")
-    check('View as Team organizer: Team, no Admin', org.is_visible('#nav [data-view="roster"]') and not org.is_visible('#nav [data-view="csongs"]'))
+    check('View as Team organizer: Team, no Admin', org.evaluate('canTeam()') and not org.evaluate('canAdmin()'))
     org.evaluate("settings.viewAs = null; render()")
 
     # ------------------------------------------------------------ teams
