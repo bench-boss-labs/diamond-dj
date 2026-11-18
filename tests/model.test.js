@@ -338,3 +338,50 @@ test('a lineup changed here before the last sync survives the next update if Dri
   const out = M.mergeTeam(local, JSON.parse(JSON.stringify(remote)), { lastSync: 300 });
   assert.equal(out.lineups[0].bench.length, 1);
 });
+
+/* ------------------------------------------------------------ 0.9 */
+test('a team’s look: colours and logo are checked, and travel in the setup', () => {
+  const t = M.checkTeam({ ...M.newTeam('Hornets'), colors: { main: '#b42318', accent: 'gold' }, logo: 'javascript:alert(1)' });
+  assert.deepEqual(t.colors, { main: '#B42318', accent: null });
+  assert.equal(t.logo, null);
+  const u = M.checkTeam({ ...M.newTeam('Hornets'), logo: 'data:image/png;base64,AAAA' });
+  assert.equal(u.logo, 'data:image/png;base64,AAAA');
+  const before = M.setupPrint(u);
+  u.colors.main = '#2E7D46';
+  assert.notEqual(M.setupPrint(u), before);
+  assert.ok(M.isLight('#F5B700') && M.isLight('#FFFFFF') && !M.isLight('#0B2447') && !M.isLight('#B42318'));
+});
+
+test('a player’s own part of a shared walk-up song', () => {
+  const lib = { songs: [{ id: 's1', path: 'Songs/a.mp3', title: 'A', start: 10, stop: 30, length: 120, fadeOut: 2 }] };
+  const p = M.newPlayer({ songId: 's1' });
+  assert.deepEqual([M.walkupPlan(p, lib, settings).song.start, M.walkupPlan(p, lib, settings).song.stop], [10, 30]);
+  p.clip = { start: 45, stop: 57 };
+  assert.deepEqual([M.walkupPlan(p, lib, settings).song.start, M.walkupPlan(p, lib, settings).song.stop], [45, 57]);
+  p.clip = { start: 100 };   // no stop: the walk-up length, but not past the end of the song
+  assert.equal(M.walkupPlan(p, lib, settings).song.stop, 115);
+  assert.equal(M.newPlayer({ clip: { start: 'x' } }).clip, null);
+  assert.deepEqual(M.checkTeam({ ...M.newTeam('X'), players: [{ id: 'p1', clip: { start: 5, stop: 2 } }] }).players[0].clip, { start: 5, stop: null });
+  assert.equal(lib.songs[0].start, 10, 'the song itself is unchanged');
+});
+
+test('who has what, from Drive sharing', () => {
+  const root = [
+    { id: 'o', type: 'user', role: 'owner', emailAddress: 'scalisec@gmail.com' },
+    { id: 'a', type: 'user', role: 'writer', emailAddress: 'benchbosslabs@gmail.com' },
+    { id: 'v', type: 'user', role: 'reader', emailAddress: 'Colleen.Scalise@gmail.com' },
+    { id: 'anyoneWithLink', type: 'anyone', role: 'reader' },
+  ];
+  // a team folder lists its own sharing and what it gets from the Diamond DJ folder
+  const bees = [...root.slice(0, 2), { id: 'v2', type: 'user', role: 'writer', emailAddress: 'colleen.scalise@gmail.com' },
+    { id: 'r', type: 'user', role: 'writer', emailAddress: 'u13basarep@gmail.com' }, root[3]];
+  const hornets = [...root, { id: 'x', type: 'anyone', role: 'reader', domain: '' }].slice(0, 3).concat([{ id: 'only', type: 'user', role: 'reader', emailAddress: 'parent@x.com' }]);
+  const a = M.accessFrom(root, [{ id: 't1', name: 'U13 Bees', folderId: 'F1', perms: bees }, { id: 't2', name: 'Hornets', folderId: 'F2', perms: hornets }]);
+  assert.deepEqual(a.admins.map(p => p.id), ['o', 'a']);
+  assert.deepEqual(a.viewers.map(p => p.id), ['v']);
+  assert.deepEqual(a.teams[0].organizers.map(p => p.emailAddress), ['colleen.scalise@gmail.com', 'u13basarep@gmail.com'], 'admins aren’t listed as organizers');
+  assert.deepEqual(a.teams[0].noCommon.map(p => p.emailAddress), ['u13basarep@gmail.com'], 'an organizer not on the Diamond DJ folder can’t get the common songs');
+  assert.deepEqual(a.teams[1].viewersOnly.map(p => p.emailAddress), ['parent@x.com']);
+  assert.equal(a.open.length, 1, 'link sharing on the Diamond DJ folder, counted once');
+  assert.ok(M.emailOk(' a.b@gmail.com ') && !M.emailOk('a@b') && !M.emailOk('two@x.com, three@y.com'));
+});

@@ -19,6 +19,11 @@ drive, DRV = fake_drive.start()
 
 def account(name): urllib.request.urlopen(f'{DRV}/_account?name={name}').read()
 def tree(): return json.loads(urllib.request.urlopen(f'{DRV}/_tree').read())
+def perms(): return json.loads(urllib.request.urlopen(f'{DRV}/_perms').read())
+def seed(**q): urllib.request.urlopen(f'{DRV}/_share?' + '&'.join(f'{k}={v}' for k, v in q.items())).read()
+def role_of(p, folder, email):
+    fid = 'ROOTFOLDER01' if folder == 'root' else p['folders'][folder]
+    return next((x['role'] for x in p['perms'].get(fid, []) if x.get('emailAddress') == email), None)
 
 errors, checks = [], []
 def check(name, ok):
@@ -179,6 +184,59 @@ with sync_playwright() as p:
     check('switch back keeps that team’s game state', vol.evaluate("team.id") == 'demo_team' and 'demo_p3' in vol.evaluate("lineup().bench"))
     vol.reload(); vol.wait_for_selector('.upnext')
     check('teams and the team in use survive a reload', vol.evaluate("Object.keys(teams).length") == 2 and vol.evaluate("team.id") == 'demo_team')
+
+    # ------------------------------------------------------------ 0.9: Add a team with Google Drive, then People and access
+    account('organizer')
+    org.evaluate("go('cteams')")
+    org.click('#addTeam')
+    org.fill('#wzName', 'U11 Hornets'); org.fill('#wzShort', 'Hornets')
+    org.click('#wzLook [data-look="main"][data-color="#2E7D46"]')
+    org.click('#wzNext'); org.click('#wzNext')
+    org.fill('[data-wp="0"]', 'coach2@example.com')
+    org.click('#wzMore'); org.fill('[data-wp="1"]', 'fan@example.com')
+    org.click('#wzNext')
+    signin_and_wait(org, '#pubGo')
+    check('Add a team: goes straight to publishing, which makes the folder', 'new folder' in org.inner_text('#pubBox').lower() and org.evaluate("team.name") == 'U11 Hornets')
+    org.click('#pubGo')
+    signin_and_wait(org, '#pubBox:has-text("Published")')
+    check('Add a team: published, then shared with 2 people', 'Shared with 2 people' in org.inner_text('#pubBox'))
+    pm = perms()
+    check('organizer: Editor on the team folder, Viewer on the Diamond DJ folder', role_of(pm, 'Hornets', 'coach2@example.com') == 'writer' and role_of(pm, 'root', 'coach2@example.com') == 'reader')
+    check('volunteer: Viewer on the Diamond DJ folder', role_of(pm, 'root', 'fan@example.com') == 'reader' and role_of(pm, 'Hornets', 'fan@example.com') is None)
+    to = [e[0] for e in pm['emails']]
+    check(f'one Google email each, with how to start {to}', sorted(to) == ['coach2@example.com', 'fan@example.com'] and 'Check for updates' in pm['emails'][0][1])
+    check('Hornets folder has its team file', 'Hornets/Hornets.diamond.json' in tree())
+
+    # People and access
+    seed(fid='ROOTFOLDER01', type='anyone')
+    seed(fid=pm['folders']['U13 Bees'], email='rep@example.com', role='writer')
+    org.evaluate("go('cpeople')")
+    signin_and_wait(org, '.add-person')
+    body = org.inner_text('#peoBox')
+    check('People: the owner, each team’s organizers, the volunteers', 'organizer@example.com' in body and 'coach2@example.com' in body and 'fan@example.com' in body and org.locator('.team-access').count() == 2)
+    check('People: Hornets card lists its organizer', 'coach2' in org.inner_text('.team-access:has-text("U11 Hornets")'))
+    check('People: link sharing flagged', 'anyone with the link' in body)
+    check('People: an organizer who can’t get the common songs is flagged', 'rep@example.com can’t get the common songs' in body)
+    org.screenshot(path=f'{OUT}/people.png', full_page=True)
+    org.click('[data-fixroot="rep@example.com"]'); signin_and_wait(org, '.add-person')
+    check('Fix: added as Viewer on the Diamond DJ folder', role_of(perms(), 'root', 'rep@example.com') == 'reader' and 'can’t get the common songs' not in org.inner_text('#peoBox'))
+    org.click('[data-restrict]'); org.click('[data-restrict]'); signin_and_wait(org, '.add-person')
+    check('Make it private: link sharing off', not any(x['type'] == 'anyone' for x in perms()['perms']['ROOTFOLDER01']) and 'anyone with the link' not in org.inner_text('#peoBox'))
+    org.fill('#peoEmail', 'newvol@example.com'); org.click('#peoAdd'); signin_and_wait(org, '.person:has-text("newvol@example.com")')
+    check('Add someone: a new volunteer', role_of(perms(), 'root', 'newvol@example.com') == 'reader')
+    org.select_option('.person:has-text("newvol@example.com") [data-promote]', label='U13 Burlington Bees (demo)'); signin_and_wait(org, '.team-access:has-text("newvol")')
+    check('Make team organizer of…', role_of(perms(), 'U13 Bees', 'newvol@example.com') == 'writer')
+    org.click('.team-access:has-text("U11 Hornets") [data-remove-org]'); org.click('.team-access:has-text("U11 Hornets") [data-remove-org]')
+    signin_and_wait(org, '.team-access:has-text("No team organizers yet")')
+    check('Remove as organizer: off the team folder, still a volunteer', role_of(perms(), 'Hornets', 'coach2@example.com') is None and role_of(perms(), 'root', 'coach2@example.com') == 'reader')
+    org.click('.person:has-text("fan@example.com") [data-make-admin]'); org.click('.person:has-text("fan@example.com") [data-make-admin]'); time.sleep(0.3); signin_and_wait(org, '.add-person')
+    check('Make Admin: Editor on the Diamond DJ folder', role_of(perms(), 'root', 'fan@example.com') == 'writer')
+    org.click('.person:has-text("newvol@example.com") [data-remove-root]'); org.click('.person:has-text("newvol@example.com") [data-remove-root]'); time.sleep(0.3); signin_and_wait(org, '.add-person')
+    check('Remove from Diamond DJ: off the team folder and the Diamond DJ folder', role_of(perms(), 'root', 'newvol@example.com') is None and role_of(perms(), 'U13 Bees', 'newvol@example.com') is None)
+    check('Admin › Teams shows organizers once People has been read', 'rep@example.com' in (org.evaluate("go('cteams'); aui.teamId = 'demo_team'; render(); document.querySelector('.facts').innerText")))
+    # a team organizer can't open People
+    coach.evaluate("go('cpeople')")
+    check('team organizer can’t open People and access', coach.evaluate("ui.view") == 'game')
     b.close()
 
 print('\nconsole/page errors:', errors or 'none')

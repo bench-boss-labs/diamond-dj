@@ -80,8 +80,10 @@ footer { color: var(--muted); font-size: 15px; padding: 30px 0 40px; }
 <li><a href="#ready">What do Ready, No announcement and Not ready mean?</a></li>
 <li><a href="#add-songs">How do I add songs?</a></li>
 <li><a href="#start-stop">How do I make a song start at the good part?</a></li>
+<li><a href="#player-part">Can one player use a different part of a common song?</a></li>
 <li><a href="#edit-moments">How do I add songs to the Music, or change a category?</a></li>
 <li><a href="#teams">How do I switch teams or add one?</a></li>
+<li><a href="#team-look">How do I change a team's logo and colours?</a></li>
 <li><a href="#settings">What do the Settings do?</a></li>
 </ul>
 <h4>Google Drive</h4>
@@ -93,7 +95,9 @@ footer { color: var(--muted); font-size: 15px; padding: 30px 0 40px; }
 <h4>For organizers</h4>
 <ul>
 <li><a href="#publish">How do I send changes to everyone?</a></li>
-<li><a href="#add-volunteer">How do I add a volunteer?</a></li>
+<li><a href="#add-volunteer">How do I add a volunteer or organizer?</a></li>
+<li><a href="#roles">Who can do what?</a></li>
+<li><a href="#add-team">How do I add a new team?</a></li>
 <li><a href="#drive-folder">What's in the Google Drive folder?</a></li>
 <li><a href="#make-announcements">How do I make announcement clips?</a></li>
 <li><a href="#backup">How do I back up a team?</a></li>
@@ -241,7 +245,7 @@ footer { color: var(--muted); font-size: 15px; padding: 30px 0 40px; }
 <p class="hint">Organizers: see <a href="#make-announcements">How do I make announcement clips?</a></p></section>
 
 <section id="walkup-song"><h3>How do I give a player a walk-up song?</h3>
-<p>In <b>Roster</b>, tap the player, then <b>2 · Walk-up song</b> › <b>Choose a song</b> and pick it from the songs on this device (add songs first in <b>Songs</b>). <b>Edit start and stop</b> jumps to that song's clip. <b>Test walkup</b> plays the whole thing, announcement and song, the way it sounds in a game.</p></section>
+<p>In <b>Roster</b>, tap the player, then <b>2 · Walk-up song</b> › <b>Choose a song</b> and pick it from the songs on this device (add songs first in <b>Songs</b>). <b>Edit start and stop</b> jumps to that song's clip; <b>Different part for this player</b> changes it for this player only (see below). <b>Test walkup</b> plays the whole thing, announcement and song, the way it sounds in a game.</p></section>
 
 <section id="under-after"><h3>Under the announcement, or after it?</h3>
 <p><b>Song comes in</b>:</p>
@@ -277,9 +281,14 @@ footer { color: var(--muted); font-size: 15px; padding: 30px 0 40px; }
 <p><b>Diamond DJ Admin</b>: Settings › <b>Admin</b> › <b>Music categories</b>. Rename a category, pick its colour, add common songs for every team, move it earlier or later, add a new category, or delete one (tap twice).</p>
 <p class="hint">From the Songs screen, <b>+ Add to a music category</b> does the same for one song.</p></section>
 
+<section id="player-part"><h3>Can one player use a different part of a common song?<span class="who">Organizers</span></h3>
+<p>Yes. In <b>Settings › Team setup › Roster</b>, tap the player, then <b>Different part for this player</b>. Set <b>Start at</b> and <b>Play for</b> (in seconds), tap <b>Listen</b> to check, then <b>Save</b>. The song itself doesn't change, so every other player and team still hears its own part. <b>Use the song's own part</b> undoes it. Publish to send it to the team.</p></section>
+
 <section id="teams"><h3>How do I switch teams or add one?</h3>
-<p>Tap the team name at the top left. Pick a team to use it, <b>+ New team</b> to start one, or <b>Remove</b> to take a team off this device (it stays in Google Drive). Each team has its own roster, lineups, music and game; songs are shared.</p>
-<p>The short name (at the top of the screen) is in <b>Settings › Team</b>.</p></section>
+<p>Tap the team name at the top left. Pick a team to use it, <b>+ New team</b> to start one on this device, or <b>Remove</b> to take a team off this device (it stays in Google Drive). Each team has its own roster, lineups, music and game; common songs are shared. The Diamond DJ Admin adds teams for everyone in <b>Admin › Teams</b> (see <a href="#add-team">How do I add a new team?</a>).</p></section>
+
+<section id="team-look"><h3>How do I change a team's logo and colours?<span class="who">Organizers</span></h3>
+<p><b>Settings › Team setup › Team info</b> › <b>Logo and colours</b>. <b>Choose a picture</b> for the logo (a square PNG with a see-through background looks best; it's made small and kept with the team), then pick the <b>Header colour</b> and the <b>Stripe under the header</b>. The preview shows how the top of the screen will look. The logo shows at the top of the screen and in the team list, and the header takes the team's colour. Buttons keep the Diamond DJ blue and gold so they look the same for every team. Publish to send it to everyone on the team.</p></section>
 
 <section id="settings"><h3>What do the Settings do?</h3>
 <p>Tap the gear. <b>Manage</b> is at the top (Lineups, and Team setup or Admin if you have that role), then four groups that open when you tap them:</p>
@@ -307,25 +316,46 @@ footer { color: var(--muted); font-size: 15px; padding: 30px 0 40px; }
 <section id="publish"><h3>How do I send changes to everyone?<span class="who">Organizers</span></h3>
 <ol>
 <li>Make the changes on your device (Roster, Team songs, Music, Lineups).</li>
-<li><b>Settings › Google Drive › Publish to Drive</b>. It appears for Google accounts with <b>Editor</b> access to the folder.</li>
+<li><b>Settings › Team setup › Publish</b> (the Diamond DJ Admin publishes the common songs and music categories in <b>Settings › Admin › Publish</b>). It's there for Google accounts with <b>Editor</b> access to the team's folder.</li>
 <li>Check the list of what will be sent (new songs, announcement clips, the team file), then tap <b>Publish</b>.</li>
 </ol>
 <p>Volunteers get it the next time they tap <b>Check for updates</b>. Nothing in Drive is deleted, the team file is only replaced after every file uploads, and Drive keeps earlier versions in its version history.</p>
 <p class="hint">“This Google account can view the team folder but not change it” means the account is a Viewer. Share the folder with it as Editor.</p></section>
 
-<section id="add-volunteer"><h3>How do I add a volunteer?<span class="who">Organizers</span></h3>
+<section id="add-volunteer"><h3>How do I add a volunteer or organizer?<span class="who">Admin</span></h3>
 <ol>
-<li>In Google Drive, share the <b>Diamond DJ</b> folder with their Google account: <b>Viewer</b> to download, <b>Editor</b> to publish.</li>
+<li><b>Settings › Admin › People</b>, and sign in with your Google account if asked.</li>
+<li>Under <b>Add someone</b>, type their email, pick <b>Volunteer</b>, <b>Team organizer · (team)</b> or <b>Diamond DJ Admin</b>, and tap <b>Add</b>. Google emails them a link with how to get started.</li>
 <li>While the app is in testing, add them in Google Cloud too: <b>console.cloud.google.com</b> › Diamond DJ project › <b>Google Auth Platform</b> › <b>Audience</b> › <b>Test users</b> › <b>Add users</b>. (Up to 100.)</li>
-<li>Send them the web address and this guide.</li>
-</ol></section>
+</ol>
+<p>On the same screen you can make a volunteer a team organizer or an Admin, remove someone, and fix the warnings it shows: someone who <b>can't get the common songs</b> (they're on a team folder but not the Diamond DJ folder: tap <b>Fix</b>), or a folder anyone with the link can open (tap <b>Make it private</b>). Team organizers can't change sharing; they ask the Admin.</p></section>
+
+<section id="roles"><h3>Who can do what?</h3>
+<p>Roles come from how the Google Drive folders are shared:</p>
+<ul>
+<li><b>Diamond DJ Admin</b>: Editor on the <b>Diamond DJ</b> folder. Common songs, music categories, every team, and who has access (<b>Settings › Admin</b>).</li>
+<li><b>Team organizer</b>: Editor on their team's folder (and Viewer on the Diamond DJ folder). Their team's roster, walk-ups, team songs, music, logo and colours (<b>Settings › Team setup</b>).</li>
+<li><b>Volunteer</b>: Viewer on the Diamond DJ folder. Gets the common songs and any team with Check for updates, and runs the music on game day.</li>
+</ul>
+<p>Everyone can change lineups on their own device. Roles are read at each Check for updates.</p></section>
+
+<section id="add-team"><h3>How do I add a new team?<span class="who">Admin</span></h3>
+<ol>
+<li><b>Settings › Admin › Teams</b> › <b>+ Add a team</b>.</li>
+<li><b>Name and look</b>: the team name, a short name for the top of the screen, and (if you have them) a logo and colours.</li>
+<li><b>How it starts</b>: empty, or with the music copied from another team (its team songs and the songs it added to music categories; not its players).</li>
+<li><b>Who has access</b>: the team's organizers and volunteers (you can add people later too), then <b>Make the team</b>.</li>
+<li>Diamond DJ goes to <b>Publish</b>: tap <b>Publish now</b>. That makes the team's folder in Google Drive and then shares it with the people you added.</li>
+</ol>
+<p><b>Admin › Teams</b> also shows every team on this device: how many players and team songs, whether it has changes to publish, its organizers, and buttons to open its setup, logo and colours, or Google Drive folder.</p></section>
 
 <section id="drive-folder"><h3>What's in the Google Drive folder?<span class="who">Organizers</span></h3>
 <pre>Diamond DJ/
-├── library.diamond.json      every song's name and cut points
-├── Shared Songs/             each song once, whichever teams use it
+├── library.diamond.json      the common songs and music categories
+├── Common Songs/             the common songs, for every team
 └── U13 Bees/                 one folder per team
-    ├── U13-Bees.diamond.json roster, team songs, music, lineups
+    ├── U13-Bees.diamond.json roster, walk-ups, team songs, music, logo and colours
+    ├── Team Songs/           the team's own songs
     └── Announcements/        one clip per player</pre>
 <p>Let the app manage these files: add songs and clips in the app, then Publish. A new team's folder is made by its first Publish.</p></section>
 
@@ -334,7 +364,7 @@ footer { color: var(--muted); font-size: 15px; padding: 30px 0 40px; }
 <p>Name each file after the player (for example <b>#7 - Jensyn Hiemstra.mp3</b>), add it in <b>Roster › Choose a clip</b>, check it with <b>Test walkup</b>, then Publish.</p></section>
 
 <section id="backup"><h3>How do I back up a team?<span class="who">Organizers</span></h3>
-<p><b>Settings › Back up › Save a backup file</b> saves the roster, lineups, song names and cut points in a small file. The music isn't in it: Google Drive keeps that. <b>Open a backup file</b> brings a team back.</p></section>
+<p><b>Settings › Advanced › Save a backup</b> saves the roster, lineups, song names and cut points in a small file. The music isn't in it: Google Drive keeps that. <b>Open a backup</b> brings a team back.</p></section>
 
 <h2>Problems</h2>
 

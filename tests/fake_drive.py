@@ -21,6 +21,39 @@ class FakeDrive:
         self.account = 'organizer'
         self.clock = 0
         self.add('ROOTFOLDER01', 'Diamond DJ', FOLDER, None)
+        # sharing: direct permissions per file; a folder's sharing reaches everything inside it
+        self.perms = {'ROOTFOLDER01': [{'id': 'P0', 'type': 'user', 'role': 'owner', 'emailAddress': 'organizer@example.com', 'displayName': 'Organizer'}]}
+        self.emails = []   # (to, message) for each "shared with you" email Google would send
+
+    RANK = {'reader': 0, 'commenter': 1, 'writer': 2, 'organizer': 3, 'owner': 4}
+
+    def effective(self, fid):
+        # this file's own sharing plus what it gets from the folders it's in (same id; the highest role wins)
+        out, chain, f = {}, [], self.files.get(fid)
+        while f:
+            chain.append(f['id'])
+            f = self.files.get(f['parents'][0]) if f['parents'] else None
+        for i, cid in enumerate(chain):
+            for p in self.perms.get(cid, []):
+                key = p.get('emailAddress', '').lower() or p['type']
+                if key not in out or self.RANK[p['role']] > self.RANK[out[key]['role']]:
+                    out[key] = dict(p)
+        return list(out.values())
+
+    def share(self, fid, email=None, role='reader', type='user'):
+        lst = self.perms.setdefault(fid, [])
+        for p in lst:
+            if (type == 'user' and p.get('emailAddress', '').lower() == (email or '').lower()) or (type != 'user' and p['type'] == type):
+                p['role'] = role
+                return p
+        # like Google: a person has the same permission id on every file (their account's id)
+        p = {'id': 'anyoneWithLink' if type == 'anyone' else 'U' + re.sub(r'\W', '', (email or '').lower()), 'type': type, 'role': role}
+        if email: p.update(emailAddress=email, displayName=email.split('@')[0])
+        lst.append(p)
+        return p
+
+    def direct(self, fid, pid):
+        return next((p for p in self.perms.get(fid, []) if p['id'] == pid), None)
 
     def now(self):
         self.clock += 1
@@ -74,7 +107,7 @@ def make_handler(drive):
         def cors(self):
             self.send_header('Access-Control-Allow-Origin', '*')
             self.send_header('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Upload-Content-Type')
-            self.send_header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, OPTIONS')
+            self.send_header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
             self.send_header('Access-Control-Expose-Headers', 'Location')
 
         def reply(self, code, body=b'', ctype='application/json', headers=None):
@@ -110,6 +143,10 @@ def make_handler(drive):
                 return self.reply(200, {'ok': True})
             if u.path == '/_tree':
                 return self.reply(200, drive.tree())
+            if u.path == '/_share':
+                return self.reply(200, drive.share(q['fid'], q.get('email'), q.get('role', 'reader'), q.get('type', 'user')))
+            if u.path == '/_perms':
+                return self.reply(200, {'perms': drive.perms, 'emails': drive.emails, 'folders': {f['name']: f['id'] for f in drive.files.values() if f['mimeType'] == FOLDER}})
             if u.path == '/auth':
                 scope = q.get('scope', '')
                 frag = urlencode({'access_token': 'tok-' + drive.account, 'token_type': 'Bearer', 'expires_in': 3600,
@@ -127,6 +164,9 @@ def make_handler(drive):
                 m = re.match(r"'([\w-]+)' in parents", q.get('q', ''))
                 files = drive.children(m.group(1)) if m else []
                 return self.reply(200, {'files': [drive.meta(f, drive.can_edit(acct, f['id'])) for f in files]})
+            m = re.match(r'/drive/v3/files/([\w-]+)/permissions$', u.path)
+            if m and m.group(1) in drive.files:
+                return self.reply(200, {'permissions': drive.effective(m.group(1))})
             m = re.match(r'/drive/v3/files/([\w-]+)$', u.path)
             if m and m.group(1) in drive.files:
                 f = drive.files[m.group(1)]
@@ -149,6 +189,16 @@ def make_handler(drive):
             u = urlparse(self.path)
             q = {k: v[0] for k, v in parse_qs(u.query).items()}
             meta = json.loads(self.body() or b'{}')
+            m = re.match(r'/drive/v3/files/([\w-]+)/permissions$', u.path)
+            if m:
+                if not self.write_allowed(m.group(1)):
+                    return
+                if not re.match(r'^[^@\s]+@[^@\s]+\.\w+$', meta.get('emailAddress', '')):
+                    return self.reply(400, {'error': {'errors': [{'reason': 'invalidSharingRequest'}]}})
+                p = drive.share(m.group(1), meta['emailAddress'], meta['role'])
+                if q.get('sendNotificationEmail') == 'true':
+                    drive.emails.append((meta['emailAddress'], q.get('emailMessage', '')))
+                return self.reply(200, p)
             if not self.write_allowed((meta.get('parents') or [None])[0]):
                 return
             if u.path == '/drive/v3/files':
@@ -169,7 +219,29 @@ def make_handler(drive):
             f = drive.add('F%d' % next(drive.ids), meta['name'], mime, meta['parents'][0], self.body())
             return self.reply(200, drive.meta(f, True))
 
+        def perm_target(self):
+            m = re.match(r'/drive/v3/files/([\w-]+)/permissions/([\w-]+)$', urlparse(self.path).path)
+            if not m or not self.write_allowed(m.group(1)):
+                return None, None
+            p = drive.direct(m.group(1), m.group(2))
+            if not p or p['role'] == 'owner':
+                self.reply(403, {'error': {'errors': [{'reason': 'cannotModifyInheritedPermission' if not p else 'invalidOwnershipTransferRequest'}]}})
+                return None, None
+            return m.group(1), p
+
+        def do_DELETE(self):
+            fid, p = self.perm_target()
+            if p:
+                drive.perms[fid].remove(p)
+                self.reply(204)
+
         def do_PATCH(self):
+            if '/permissions/' in self.path:
+                fid, p = self.perm_target()
+                if p:
+                    p['role'] = json.loads(self.body() or b'{}').get('role', p['role'])
+                    self.reply(200, p)
+                return
             m = re.match(r'/upload/drive/v3/files/([\w-]+)$', urlparse(self.path).path)
             if not m or m.group(1) not in drive.files or not self.write_allowed(m.group(1)):
                 return

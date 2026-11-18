@@ -1,5 +1,35 @@
 [
   {
+    "version": "0.9.0",
+    "date": "2026-11-18",
+    "notes": [
+      {
+        "type": "new",
+        "text": "Team logo and colours: Settings › Team setup › Team info › Logo and colours. The logo shows at the top of the screen and in the team list, and the header takes the team's colour. Buttons keep the Diamond DJ blue and gold."
+      },
+      {
+        "type": "new",
+        "text": "Admin › Teams: every team at a glance (players, team songs, whether it has changes to publish, its organizers), with buttons to open its setup, logo and colours, or Google Drive folder."
+      },
+      {
+        "type": "new",
+        "text": "Add a team in three steps: name and look, start empty or copy another team's music, and who has access. Publishing it makes the team's Google Drive folder and shares it with the people you added."
+      },
+      {
+        "type": "new",
+        "text": "Admin › People: see who has access, add volunteers, team organizers and Admins (Google emails them a link), change roles or remove someone. Warns about anyone who can't get the common songs and folders anyone with the link can open, with a one-tap fix."
+      },
+      {
+        "type": "new",
+        "text": "A different part of a common song for one player: Roster › Different part for this player. The song stays the same for everyone else."
+      },
+      {
+        "type": "improved",
+        "text": "Phones: the five Admin tabs fit on one row."
+      }
+    ]
+  },
+  {
     "version": "0.8.1",
     "date": "2026-11-17",
     "notes": [

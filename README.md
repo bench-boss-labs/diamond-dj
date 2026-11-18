@@ -6,22 +6,42 @@ screen, and plays everything from the device, so no wifi is needed at the field.
 
 First team: U13 Burlington Bees. Design spec and mockups live in the claude.ai project "Diamond DJ".
 
-## Roles (version 0.6, screens from 0.7)
+## Roles (version 0.6, screens from 0.7, People and access from 0.9)
 
 | Role | Google Drive sharing | Sees in Settings › Manage |
 | --- | --- | --- |
 | Diamond DJ Admin | Editor on the Diamond DJ folder | Lineups, **Team setup** (any team), **Admin** |
 | Team organizer | Editor on their team's folder | Lineups, **Team setup** |
-| Volunteer | Viewer on their team's folder and the Diamond DJ folder | Lineups |
+| Volunteer | Viewer on the Diamond DJ folder (it reaches every team folder inside) | Lineups |
 
 Roles are read at Check for updates. A device that has never checked Drive can set everything up.
 The Admin can try the other roles with Settings › Advanced › View as.
 
 - **Team setup:** Roster & walk-ups, Team songs, Music (add team songs to a category, hide one),
-  Team info, Publish (the team file, team songs, announcements).
-- **Admin:** Common songs, Music categories (name, colour, order, common songs), Publish (the common library).
+  Team info (name, short name, logo and colours), Publish (the team file, team songs, announcements).
+- **Admin:** Teams (summary, each team's status and organizers, **+ Add a team**), People (Drive
+  sharing: add, change, remove; warnings), Common songs, Music categories (name, colour, order,
+  common songs), Publish (the common library).
 
-## What it does (version 0.8)
+### Version 0.9
+
+- **Team look**: a logo (made small and kept in the team file as a PNG data URL, so it travels with
+  the team and needs no extra download) and two colours: the header behind the team name and a stripe
+  under it. Shown in the header and the team picker; light colours get dark writing. Buttons keep the
+  Diamond DJ blue and gold. The Admin screen keeps the plain Diamond DJ header.
+- **Add a team** (Admin › Teams): 1 name and look, 2 start empty or copy another team's music
+  (team songs are copied to the new team's own files), 3 who has access. Then it publishes (making
+  the team's Drive folder) and shares it. Sharing that can't happen yet waits in `Drive.state.pending`
+  and runs after the team's next publish, or when People is opened.
+- **People and access** (Admin › People) uses the Drive permissions API (`drive` scope, Admin only).
+  Organizers get Editor on the team folder plus Viewer on the Diamond DJ folder (one Google email,
+  from the team folder); volunteers get Viewer on the Diamond DJ folder; Admins get Editor on it.
+  `Model.accessFrom()` sorts the sharing into Admins, organizers per team, volunteers, people who
+  can't get the common songs, and link sharing to turn off.
+- **A player's own part** of a song (`player.clip = {start, stop}`): Roster › Different part for this
+  player. The song's own cut points are unchanged for everyone else.
+
+## What it does (version 0.9)
 
 - **Game** (the only main screen): team, Lock, Help and Settings at the top. Big "Up next" card with
   **Play walkup** (announcement, then the song) and **Skip**; the batting order auto-advances and

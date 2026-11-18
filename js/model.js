@@ -32,7 +32,8 @@
   /* ------------------------------------------------------------ teams and players */
 
   function newTeam(name, short) {
-    const team = { format: FORMAT_TEAM, version: 4, id: uid('t'), name, short: short || name, players: [], lineups: [], songs: [], music: {}, hiddenCats: [] };
+    const team = { format: FORMAT_TEAM, version: 4, id: uid('t'), name, short: short || name, players: [], lineups: [], songs: [], music: {}, hiddenCats: [],
+      colors: { main: null, accent: null }, logo: null };
     team.lineups.push(newLineup('Default'));
     return team;
   }
@@ -112,7 +113,30 @@
       intro: fields.intro || null,
       songId: fields.songId || null,
       entry: fields.entry === 'after' ? 'after' : 'under',
+      clip: cleanClip(fields.clip),
     };
+  }
+  // this player's own part of the walk-up song (0.9): { start, stop|null } in seconds, or null for the song's own
+  function cleanClip(c) {
+    if (!c || typeof c !== 'object' || !isFinite(+c.start)) return null;
+    const start = Math.max(0, +c.start);
+    const stop = c.stop != null && isFinite(+c.stop) && +c.stop > start ? +c.stop : null;
+    return { start, stop };
+  }
+
+  /* ------------------------------------------------------------ the team's look (0.9)
+     colors.main is the header behind the team's name; the logo is a small picture kept in the team file. */
+  const TEAM_COLORS = ['#0B2447', '#1E56B8', '#B42318', '#2E7D46', '#6B3FA0', '#E8702A', '#0E7C86', '#111111', '#F5B700', '#FFFFFF'];
+  function cleanLook(t) {
+    const c = t.colors && typeof t.colors === 'object' ? t.colors : {};
+    t.colors = { main: hexOk(c.main) ? c.main.toUpperCase() : null, accent: hexOk(c.accent) ? c.accent.toUpperCase() : null };
+    t.logo = typeof t.logo === 'string' && /^data:image\/(png|jpeg|webp|gif|svg\+xml);base64,/.test(t.logo) && t.logo.length < 400000 ? t.logo : null;
+  }
+  // dark writing on a light colour, light writing on a dark one
+  function isLight(hex) {
+    if (!hexOk(hex)) return false;
+    const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255).map(v => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.4;
   }
 
   function playerName(p) {
@@ -316,8 +340,9 @@
     if (!song && !intro) return null;
     let songPart = null;
     if (song) {
-      const start = Math.max(0, song.start || 0);
-      let stop = song.stop != null && song.stop > start ? song.stop : start + settings.walkupSeconds;
+      const own = cleanClip(player.clip);
+      const start = own ? own.start : Math.max(0, song.start || 0);
+      let stop = own ? (own.stop ?? start + settings.walkupSeconds) : song.stop != null && song.stop > start ? song.stop : start + settings.walkupSeconds;
       if (song.length && stop > song.length) stop = song.length;
       songPart = {
         songId: song.id,
@@ -352,6 +377,7 @@
     obj.hiddenCats = ids(obj.hiddenCats);
     delete obj.moments; delete obj.hidden; delete obj.extra;
     obj.version = 4;
+    cleanLook(obj);
     obj.players = obj.players.map(p => ({ ...newPlayer(p), id: String(p.id || uid('p')) }));
     obj.lineups = obj.lineups.map(l => ({
       id: String(l.id || uid('l')), name: String(l.name || 'Lineup'),
@@ -380,7 +406,8 @@
   /* The part of a team the organizer publishes and an update replaces: name, roster, moments.
      Lineups are separate: they belong to whoever is running the game. */
   function setupOf(team) {
-    return { name: team.name, short: team.short, players: team.players, songs: team.songs, music: team.music, hiddenCats: team.hiddenCats };
+    return { name: team.name, short: team.short, players: team.players, songs: team.songs, music: team.music, hiddenCats: team.hiddenCats,
+      colors: team.colors, logo: team.logo };
   }
   // a short fingerprint, to tell whether a device changed the setup since it last synced
   function fingerprint(obj) {
@@ -452,6 +479,36 @@
     return null;
   }
   const fileName = path => path.split('/').pop();
+
+  /* Who has what, from Google Drive sharing (0.9).
+     rootPerms: the Diamond DJ folder's sharing; teams: [{ id, name, folderId, perms }] for each team folder.
+     Sharing on the Diamond DJ folder reaches everything inside it, so:
+       Editor of the Diamond DJ folder = Diamond DJ Admin
+       Viewer of the Diamond DJ folder = can get the common songs and every team (volunteers)
+       Editor of a team's folder (and not an Admin) = that team's organizer
+     Also: people on a team folder who aren't on the Diamond DJ folder (they can't get the common
+     songs), and "anyone with the link" sharing, which should be off. */
+  const EDIT_ROLES = ['owner', 'organizer', 'fileOrganizer', 'writer'];
+  function accessFrom(rootPerms, teams) {
+    const person = p => p.type === 'user' || p.type === 'group';
+    const email = p => String(p.emailAddress || '').toLowerCase();
+    const edits = p => EDIT_ROLES.includes(p.role);
+    const root = (rootPerms || []).filter(person);
+    const onRoot = new Map(root.map(p => [email(p), p]));
+    const open = (rootPerms || []).filter(p => p.type === 'anyone' || p.type === 'domain').map(perm => ({ where: null, perm }));
+    const rootIds = new Set((rootPerms || []).map(p => p.id));
+    const out = (teams || []).map(t => {
+      const perms = t.perms || [];
+      for (const perm of perms) if ((perm.type === 'anyone' || perm.type === 'domain') && !rootIds.has(perm.id)) open.push({ where: t.id, perm });
+      const organizers = perms.filter(p => person(p) && edits(p) && !(onRoot.has(email(p)) && edits(onRoot.get(email(p)))));
+      const viewersOnly = perms.filter(p => person(p) && !edits(p) && !onRoot.has(email(p)));
+      const noCommon = organizers.concat(viewersOnly).filter(p => !onRoot.has(email(p)));
+      return { id: t.id, name: t.name, folderId: t.folderId, organizers, viewersOnly, noCommon };
+    });
+    return { admins: root.filter(edits), viewers: root.filter(p => !edits(p)), teams: out, open };
+  }
+  const emailOk = e => /^[^\s@,;<>]+@[^\s@,;<>]+\.[a-z]{2,}$/i.test(String(e || '').trim());
+
   const teamSongPath = (teamId, name) => `Teams/${teamId}/${name}`;
 
   const api = {
@@ -464,6 +521,7 @@
     CAT_COLORS, newCategory, defaultCategories, removeSongEverywhere, pickShuffle, notePlayed, clipOf,
     setupOf, fingerprint, setupPrint, libraryPrint, teamSongIds, mergeTeam, mergeLibrary, commonSongsMissing, drivePathFor,
     gameMusic, poolFor, fileName, teamSongPath,
+    TEAM_COLORS, cleanLook, isLight, cleanClip, accessFrom, emailOk,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Model = api;

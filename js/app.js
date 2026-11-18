@@ -44,7 +44,7 @@ const stored = new Set(); // paths of audio files on this device
 const ui = { view: 'game', playerId: null, songId: null, lineupId: null, songQuery: '', gameTab: 'walkups', catId: null,
   phoneDetail: false, showAllBatters: false };
 const TEAM_VIEWS = ['roster', 'songs', 'music', 'teaminfo', 'publish'];   // the Team screen (team organizers)
-const ADMIN_VIEWS = ['csongs', 'cmusic', 'cpublish'];                         // the Admin screen (Diamond DJ Admin)
+const ADMIN_VIEWS = ['cteams', 'cpeople', 'csongs', 'cmusic', 'cpublish'];   // the Admin screen (Diamond DJ Admin)
 const SETUP_VIEWS = TEAM_VIEWS.concat(ADMIN_VIEWS);
 // Songs and Music show the team's own on the Team screen, the common library's on the Admin screen
 const commonScope = () => ADMIN_VIEWS.includes(ui.view);
@@ -124,7 +124,7 @@ const main = $('#main');
 const phoneQuery = matchMedia('(max-width: 640px)');
 const phone = () => phoneQuery.matches;
 // on a phone, list screens (Roster, Songs, Music) show the list, or one item full screen
-const BACK_LABEL = { roster: 'Roster', songs: 'Team songs', music: 'Music', csongs: 'Common songs', cmusic: 'Music categories' };
+const BACK_LABEL = { cteams: 'Teams', roster: 'Roster', songs: 'Team songs', music: 'Music', csongs: 'Common songs', cmusic: 'Music categories' };
 function backBar(title) {
   return `<div class="phone-back"><button class="back-btn" data-act="phone-back">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>${BACK_LABEL[ui.view]}</button>
@@ -254,7 +254,7 @@ function renderGame() {
 function walkupsHtml() {
   const l = lineup();
   if (!team.players.length) {
-    return `<div class="empty"><p><b>No players yet.</b></p><p>Add the team in Roster, or try the app with the demo team.</p>
+    return `<div class="empty"><p><b>No players yet.</b></p><p>Add the players in Team setup, or get the team from Google Drive in Settings › Updates.</p>
       <div class="row" style="justify-content:center">${settings.locked || !canTeam() ? '' : '<button class="btn primary" data-act="go" data-view="roster">Set up the roster</button>'}</div></div>`;
   }
   const { first, tags } = batterTags(l);
@@ -485,10 +485,10 @@ function renderRoster() {
         </div>
         <div class="slotcard song ${s && !songOk ? 'missing' : ''}">
           <span class="k">2 · Walk-up song</span>
-          ${s ? `<span class="v">${esc(Model.songLabel(s))} <span class="pill ${team.songs.includes(s) ? '' : 'common-pill'}">${team.songs.includes(s) ? 'Team song' : 'Common'}</span></span><span class="hint">Plays ${clipText(s)}, fades out over ${secs(s.fadeOut)} s</span>${songOk ? '' : '<span class="status no-song">File not on this device</span>'}` : '<span class="v none">None yet</span>'}
+          ${s ? `<span class="v">${esc(Model.songLabel(s))} <span class="pill ${team.songs.includes(s) ? '' : 'common-pill'}">${team.songs.includes(s) ? 'Team song' : 'Common'}</span></span><span class="hint">${p.clip ? `Plays ${mmss(Model.walkupPlan(p, pool(), settings).song.start)}–${mmss(Model.walkupPlan(p, pool(), settings).song.stop)} <b>for ${esc(p.first || 'this player')} only</b>` : `Plays ${clipText(s)}`}, fades out over ${secs(s.fadeOut)} s</span>${songOk ? '' : '<span class="status no-song">File not on this device</span>'}` : '<span class="v none">None yet</span>'}
           <div class="row">
             <button class="btn small" data-act="choose-song">${s ? 'Change song' : 'Choose a song'}</button>
-            ${s ? `${team.songs.includes(s) || canAdmin() ? '<button class="btn small" data-act="edit-clip">Edit start and stop</button>' : ''}<button class="btn small danger" data-act="song-remove">Remove</button>` : ''}
+            ${s ? `${team.songs.includes(s) || canAdmin() ? '<button class="btn small" data-act="edit-clip">Edit start and stop</button>' : ''}<button class="btn small" data-act="player-clip">${p.clip ? 'This player’s part' : 'Different part for this player'}</button><button class="btn small danger" data-act="song-remove">Remove</button>` : ''}
           </div>
         </div>
       </div>
@@ -758,7 +758,7 @@ function openSettings() {
       <span class="section-title">Manage</span>
       ${manageRow('lineup', ICON_LINEUPS, 'Lineups', `${esc(lineup().name)} is in use · ${team.lineups.length} saved`)}
       ${canTeam() ? manageRow('roster', ICON_TEAM, 'Team setup', `${esc(team.short || team.name)}: roster, walk-ups, team songs, music`, teamDirty ? 'Changes to publish' : '') : ''}
-      ${canAdmin() ? manageRow('csongs', ICON_ADMIN, 'Admin', 'Common songs and music categories for every team', commonDirty ? 'Changes to publish' : '') : ''}
+      ${canAdmin() ? manageRow('cteams', ICON_ADMIN, 'Admin', 'Teams, people and access, common songs and music categories', commonDirty ? 'Changes to publish' : '') : ''}
     </div>
     <span class="section-title">Settings</span>
     ${group('updates', 'Updates', when ? `Last checked ${esc(when)}` : 'Get the roster and songs from Google Drive', `<div id="driveBox" class="stack"></div>
@@ -1108,7 +1108,7 @@ function openTeams() {
   const list = Object.values(teams).sort((a, b) => a.name.localeCompare(b.name)).map(t => {
     const st = Drive.state.teams[t.id];
     return `<div class="row team-row">
-      <button class="item ${t.id === team.id ? 'sel' : ''}" data-team="${esc(t.id)}" style="flex:1">
+      <button class="item ${t.id === team.id ? 'sel' : ''}" data-team="${esc(t.id)}" style="flex:1">${teamBadge(t, 40)}
         <span class="grow"><span class="name">${esc(t.name)}</span>
         <span class="sub">${t.players.length} player${t.players.length === 1 ? '' : 's'}${st ? ' · from Google Drive' : ''}</span></span>
         ${t.id === team.id ? '<span class="pill">In use</span>' : ''}</button>
@@ -1276,8 +1276,14 @@ async function runPublish() {
   pBusy('Publishing…');
   try {
     const r = common ? await Drive.publishCommon(pui.plan, { say: pSay, meter: pMeter }) : await Drive.publish(pui.plan, { say: pSay, meter: pMeter });
+    // people added in Add a team (or while the team had no folder) get shared now
+    let shared = 0, shareNote = '';
+    if (!common && pendingFor(team.id).length) {
+      try { shared = await runPending(team.id, pSay); } catch (e) { shareNote = ` Sharing didn’t finish (${driveError(e)}); it’s waiting in Admin › People.`; }
+    }
     pui.phase = 'idle';
-    pui.note = `Published ${common ? 'the common library' : team.name}${r.sent ? ` and ${r.sent} file${r.sent === 1 ? '' : 's'}` : ''}. ${common ? 'Every team' : 'Everyone on the team'} gets it with Check for updates.`;
+    pui.note = `Published ${common ? 'the common library' : team.name}${r.sent ? ` and ${r.sent} file${r.sent === 1 ? '' : 's'}` : ''}. ${common ? 'Every team' : 'Everyone on the team'} gets it with Check for updates.${shared ? ` Shared with ${shared} ${shared === 1 ? 'person' : 'people'}; Google has emailed them.` : ''}${shareNote}`;
+    peo.data = null;
     render();
     toast(pui.note);
   } catch (e) { pFailed(e); }
@@ -1288,6 +1294,14 @@ function resumeAfterSignIn() {
   const r = Auth.consume();
   if (!r) return false;
   if (settings.locked && r.resume) { toast('Unlock first to use Google Drive.'); return true; }
+  if (r.resume === 'people') {
+    ui.view = 'cpeople';
+    if (r.error) { peo.phase = 'idle'; peo.note = r.error === 'access_denied' ? 'Google sign-in was cancelled.' : 'Google sign-in didn’t finish. Try again.'; render(); return true; }
+    peo.phase = 'idle'; peo.note = '';
+    render();
+    loadPeople();
+    return true;
+  }
   if (String(r.resume).startsWith('publish')) {
     ui.view = r.resume === 'publish-common' ? 'cpublish' : 'publish';
     pui.kind = r.resume === 'publish-common' ? 'common' : 'team';
@@ -1311,10 +1325,11 @@ function resumeAfterSignIn() {
 function render() {
   if ((settings.locked && SETUP_VIEWS.includes(ui.view)) || (TEAM_VIEWS.includes(ui.view) && !canTeam()) || (ADMIN_VIEWS.includes(ui.view) && !canAdmin())) ui.view = 'game';
   renderNav();
+  applyLook();
   $('#teamName').textContent = team.short || team.name || 'Diamond DJ';
   if (!['songs', 'csongs'].includes(ui.view)) { Sound.stopPreview(); edit.songId = null; }
   ({ game: renderGame, lineup: renderLineup, roster: renderRoster, songs: renderSongs, music: renderMusicSetup, teaminfo: renderTeamInfo,
-    publish: () => renderPublish('team'), csongs: renderSongs, cmusic: renderMusicSetup, cpublish: () => renderPublish('common') })[ui.view]();
+    publish: () => renderPublish('team'), cteams: renderAdminTeams, cpeople: renderPeople, csongs: renderSongs, cmusic: renderMusicSetup, cpublish: () => renderPublish('common') })[ui.view]();
 }
 
 /* The header: Game and Lineup for everyone; Team (team organizers) and Admin (Diamond DJ Admin)
@@ -1335,7 +1350,7 @@ function renderNav() {
       ${tab('roster', 'Roster<span class="wide-only">&nbsp;&amp; walk-ups</span>')}${tab('songs', 'Team songs')}${tab('music', 'Music')}${tab('teaminfo', 'Team info')}${tab('publish', 'Publish', teamDirty)}</div></div>`;
   else if (ws === 'admin') html = `<button class="ws-back" data-view="game"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>Game</button>
     <div class="tab-group"><span class="group-label in-game">Diamond DJ Admin · all teams</span><div class="group game ws-tabs">
-      ${tab('csongs', 'Common songs')}${tab('cmusic', 'Music categories')}${tab('cpublish', 'Publish', commonDirty)}</div></div>`;
+      ${tab('cteams', 'Teams')}${tab('cpeople', 'People')}${tab('csongs', '<span class="wide-only">Common&nbsp;</span>Songs')}${tab('cmusic', '<span class="wide-only">Music categories</span><span class="phone-only">Music</span>')}${tab('cpublish', 'Publish', commonDirty)}</div></div>`;
   else if (ui.view === 'lineup') html = `<button class="ws-back" data-view="game"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>Game</button>
     <span class="ws-title">Lineups</span>`;
   // the Game screen: nothing here. Lineups, Team and Admin are in Settings › Manage
@@ -1348,18 +1363,21 @@ function renderTeamInfo() {
   const st = Drive.state.teams[team.id];
   const r = role();
   main.innerHTML = `<div class="cols">
-    <section class="panel stack" style="gap:14px"><span class="section-title">Team info</span>
+    <div class="ti-left"><section class="panel stack" style="gap:14px"><span class="section-title">Team info</span>
       <div class="grid2"><label class="field">Team name<input type="text" id="tiName" value="${esc(team.name)}" autocomplete="off"></label>
         <label class="field">Short name (top of the screen)<input type="text" id="tiShort" value="${esc(team.short || '')}" maxlength="16" autocomplete="off"></label></div>
       <p class="hint">Changes save on this device as you type. <b>Publish</b> sends them to every device on the team.</p>
     </section>
+
     <section class="panel stack" style="gap:12px"><span class="section-title">People and roles</span>
       <p>On this device you’re <b>${ROLE_NAME[r]}</b>${settings.viewAs ? ' (viewing as, from Settings)' : ''}.</p>
       <p class="hint">Roles come from Google Drive sharing of ${st ? `the team’s folder, <b>${esc(st.folderName)}</b>` : 'the team’s folder (made the first time the team is published)'}: <b>Editor</b> = team organizer, <b>Viewer</b> = volunteer. Volunteers also need <b>Viewer</b> on the Diamond DJ folder for the common songs.</p>
       ${st ? `<div class="row"><a class="btn" href="https://drive.google.com/drive/folders/${esc(st.folderId)}" target="_blank" rel="noopener">Open the team’s folder in Google Drive</a></div>` : ''}
-    </section></div>`;
+    </section></div>
+    <section class="panel stack look-box" style="gap:14px"><span class="section-title">Logo and colours</span><div id="tiLook" class="stack" style="gap:14px">${lookHtml(team)}</div></section></div>`;
   $('#tiName').oninput = e => { team.name = e.target.value; saveTeam(); };
   $('#tiShort').oninput = e => { team.short = e.target.value; saveTeam(); $('#teamName').textContent = team.short || team.name || 'Diamond DJ'; };
+  bindLook($('#tiLook'), team, () => { saveTeam(); applyLook(); renderNav(); });
 }
 
 /* ---------------- Team screen › Publish, and Admin › Publish (the common library) */
@@ -1526,6 +1544,7 @@ async function onAction(e) {
           run: b => { if (!armed(b, 'Tap again to delete')) return; closeDialog(); deleteLineup(); } },
       ]);
     }
+    case 'player-clip': return openPlayerClip(p, song(p.songId));
     case 'phone-back': ui.phoneDetail = false; Sound.stopPreview(); return render();
     case 'show-batters': ui.showAllBatters = !ui.showAllBatters; return render();
     case 'lu-use': game.lineupId = ui.lineupId; game.upNext = null; saveGame(); toast('The Game screen now uses this lineup, from batter 1.'); return render();
@@ -1846,7 +1865,8 @@ function openHelp(section) {
     <div ${Drive.state.editor ? '' : 'hidden'}>
     <h3>For organizers</h3>
     ${q('How do I send changes to every device?', `<p><b>Settings › Team setup › Publish</b> (and, for the common songs and music categories, <b>Settings › Admin › Publish</b>). It lists what will be sent (new songs, announcement clips, the team file) before anything goes. Volunteers get it the next time they tap <b>Check for updates</b>. Nothing in Drive is deleted, and Drive keeps earlier versions.</p>`)}
-    ${q('How do I add a volunteer?', `<p>Share the <b>Diamond DJ</b> Google Drive folder with their Google account as <b>Viewer</b> (or <b>Editor</b> for someone who will publish). While the app is in testing, also add them in Google Cloud (Diamond DJ project › Google Auth Platform › Audience › <b>Test users</b>).</p>`)}
+    ${q('How do I add a volunteer or organizer?', `<p>The Diamond DJ Admin does it in <b>Settings › Admin › People</b>: type their email, pick the role, tap <b>Add</b>. Google emails them a link. While the app is in testing, also add them in Google Cloud (Diamond DJ project › Google Auth Platform › Audience › <b>Test users</b>).</p>`)}
+    ${q('How do I add a team, or change its logo and colours?', `<p>New team: <b>Settings › Admin › Teams › + Add a team</b> (name and look, how it starts, who has access), then Publish. Logo and colours: <b>Settings › Team setup › Team info</b>, then Publish.</p>`)}
     ${q('How do I add a song or set where it starts?', `<p><b>Songs › Add songs</b> and pick MP3s. Tap a song, play it, then <b>Set start here</b> at the catchy part and <b>Set stop here</b> where it should end. Link it to a player in <b>Roster</b>, then publish.</p>`)}
     </div>
 

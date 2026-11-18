@@ -147,6 +147,54 @@ const Drive = {
     return (await this.call('PATCH', this.up('files/' + id, { uploadType: 'media', fields: 'id,name,size,md5Checksum,modifiedTime' }), blob, { 'Content-Type': type })).json();
   },
 
+  /* ------------------------------------------------------------ sharing (People and access, 0.9) */
+  async permissions(fileId) {
+    const out = [];
+    let token = '';
+    do {
+      const p = { fields: 'nextPageToken,permissions(id,type,role,emailAddress,displayName,domain)', supportsAllDrives: 'true', pageSize: '100' };
+      if (token) p.pageToken = token;
+      const j = await this.json(`files/${fileId}/permissions`, p);
+      out.push(...(j.permissions || []));
+      token = j.nextPageToken || '';
+    } while (token);
+    return out;
+  },
+  // Google emails the person (with the message) and the folder appears in their "Shared with me"
+  async share(fileId, email, role, message = '', { notify = true } = {}) {
+    const params = { sendNotificationEmail: notify ? 'true' : 'false', supportsAllDrives: 'true', fields: 'id,type,role,emailAddress' };
+    if (message && notify) params.emailMessage = message;
+    return (await this.call('POST', this.api(`files/${fileId}/permissions`, params), JSON.stringify({ type: 'user', role, emailAddress: email.trim() }),
+      { 'Content-Type': 'application/json; charset=UTF-8' })).json();
+  },
+  async setRole(fileId, permId, role) {
+    return (await this.call('PATCH', this.api(`files/${fileId}/permissions/${permId}`, { supportsAllDrives: 'true', fields: 'id,role' }), JSON.stringify({ role }),
+      { 'Content-Type': 'application/json; charset=UTF-8' })).json();
+  },
+  async unshare(fileId, permId) {
+    await this.call('DELETE', this.api(`files/${fileId}/permissions/${permId}`, { supportsAllDrives: 'true' }));
+  },
+
+  /* Everyone the Diamond DJ folder and each team folder is shared with. Team folders are matched to
+     teams by the team file inside (its id), so a renamed folder still lines up. */
+  async access(say = () => {}) {
+    if (navigator.onLine === false) throw new Error('drive:offline');
+    say('Reading who the Diamond DJ folder is shared with…');
+    const root = await this.json('files/' + this.folderId(), { fields: 'id,name,capabilities(canAddChildren)' });
+    if (!root.capabilities?.canAddChildren) throw new Error('drive:noteditor');
+    const rootPerms = await this.permissions(root.id);
+    const teams = [];
+    for (const folder of (await this.list(root.id)).filter(f => f.mimeType === FOLDER_TYPE && f.name !== DRIVE.songsFolder)) {
+      say(`Reading ${folder.name}…`);
+      const file = (await this.list(folder.id)).find(f => /\.diamond\.json$/i.test(f.name));
+      let id = null, name = folder.name;
+      if (file) { try { const d = await (await this.download(file.id)).json(); id = d.id || null; name = d.name || name; } catch (e) {} }
+      if (!id) id = Object.keys(this.state.teams).find(k => this.state.teams[k].folderId === folder.id) || 'folder:' + folder.id;
+      teams.push({ id, name, folderId: folder.id, folderName: folder.name, perms: await this.permissions(folder.id) });
+    }
+    return { root, rootPerms, teams, when: Date.now() };
+  },
+
   /* ------------------------------------------------------------ reading the folder */
 
   /* Everything in the Diamond DJ folder that matters: who may change what, the common library
