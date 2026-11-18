@@ -25,7 +25,11 @@
       },
       {
         "type": "improved",
-        "text": "Phones: the five Admin tabs fit on one row."
+        "text": "Team setup and Admin have a simpler header: plain tabs in their own row, with the one you're on underlined in gold. They fit on a phone."
+      },
+      {
+        "type": "improved",
+        "text": "Publish moved to Settings › Publish, like Rinkside DJ: each team you look after (and the common songs, for the Admin) with what changed and a Publish button. A gold dot on the gear, and a note at the top of Team setup and Admin, mean something is waiting."
       }
     ]
   },

@@ -490,7 +490,7 @@ body.ws-lineup .head { border-bottom: 4px solid var(--gold); }
 .set-group + .set-group { margin-top: 8px; }
 .set-group > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 8px 14px; }
 .set-group > summary::-webkit-details-marker { display: none; }
-.set-group > summary .grow { display: flex; flex-direction: column; gap: 2px; }
+.set-group > summary .grow, .manage-row .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .set-group > summary b { font-size: 17px; color: var(--navy); }
 .set-group .plus { width: 30px; height: 30px; flex: none; border-radius: 50%; background: var(--ground); position: relative; }
 .set-group .plus::before, .set-group .plus::after { content: ''; position: absolute; left: 9px; right: 9px; top: 14px; height: 2px; background: var(--navy); }
@@ -624,4 +624,56 @@ body.wizard-open #dlgClose { display: none; }
   .facts { grid-template-columns: minmax(0, 1fr); }
   .wiz-steps li { font-size: 0; justify-content: center; }
   .wiz-steps li.on { font-size: 13px; }
+}
+
+/* ------------------------------------------------------------ 1.0: Team setup and Admin headers: underline tabs in their own row;
+   Publish in Settings, with a dot on the gear and a note on these screens */
+body.ws .head { flex-wrap: wrap; row-gap: 0; padding-bottom: 0; }
+body.ws .head .team-name, body.ws .head .logo { display: none; }
+body.ws-team .head.has-team-logo .logo { display: block; width: 44px; height: 44px; order: 0; }
+body.ws .head .tabs { order: 1; flex: 1 1 auto; min-width: 0; margin: 0; display: flex; align-items: center; justify-content: flex-start; gap: 12px; padding: 6px 0; }
+body.ws .head .lock-btn { order: 2; margin-left: auto; }
+body.ws .head #helpBtn { order: 3; }
+body.ws .head #settingsBtn { order: 4; }
+body.ws .head .ws-back { flex: none; }
+.ws-head { display: flex; flex-direction: column; line-height: 1.1; min-width: 0; }
+.ws-label { font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--gold); white-space: nowrap; }
+.ws-name { font-family: var(--cond); font-weight: 700; font-size: 22px; text-transform: uppercase; letter-spacing: .02em; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.head.team-light .ws-name { color: #0B1730; }
+.head.team-light .ws-label { color: #0B1730; opacity: .75; }
+.ws-tabbar { order: 10; flex: 1 1 100%; display: flex; gap: 4px; margin: 6px -16px 0; padding: 0 10px; border-top: 1px solid rgba(255,255,255,.12); overflow-x: auto; scrollbar-width: none; }
+.ws-tabbar[hidden] { display: none; }
+.ws-tabbar button { flex: 0 0 auto; min-height: 48px; padding: 0 16px; border: 0; background: none; color: #C9D6EC; font-weight: 600; font-size: 16px; white-space: nowrap; border-radius: 0; }
+.ws-tabbar button[aria-current="page"] { color: var(--gold); font-weight: 700; box-shadow: inset 0 -3px 0 var(--gold); }
+.head.team-light .ws-tabbar { border-top-color: rgba(0,0,0,.15); }
+.head.team-light .ws-tabbar button { color: #33425E; }
+.head.team-light .ws-tabbar button[aria-current="page"] { color: #0B1730; box-shadow: inset 0 -3px 0 #0B1730; }
+body.ws-team .head, body.ws-admin .head { border-bottom-width: 0; }
+body.ws-team .head:not(.team-look), body.ws-admin .head { box-shadow: inset 0 -1px 0 transparent; }
+body.ws-team .head:not(.team-look) .ws-tabbar, body.ws-admin .ws-tabbar { border-bottom: 4px solid var(--gold); }
+body.locked .ws-tabbar { display: none; }
+
+#settingsBtn { position: relative; }
+#settingsBtn.has-dot::after { content: ''; position: absolute; top: 5px; right: 5px; width: 11px; height: 11px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 0 2px var(--navy); }
+.pub-note { flex: none; display: flex; align-items: center; gap: 10px; padding: 6px 16px; background: var(--gold-soft); border-bottom: 1px solid var(--gold); font-weight: 600; font-size: 15px; color: #5A4300; }
+.pub-note[hidden] { display: none; }
+.pub-note span { flex: 1; min-width: 0; }
+.pub-note .btn { min-height: 38px; }
+.pub-row { display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 6px 0; border-top: 1px solid var(--line); }
+.pub-row:first-child { border-top: 0; }
+.pub-row .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.pub-row .sub { font-size: 13px; color: var(--muted); }
+.pub-row .sub.hot { color: #8A6400; font-weight: 700; }
+.common-badge { background: var(--navy); color: var(--gold); font-size: 14px; }
+.count-pill { display: inline-grid; place-items: center; min-width: 22px; height: 22px; margin-left: 6px; padding: 0 6px; border-radius: 11px; background: var(--gold); color: var(--navy); font-size: 13px; font-weight: 700; vertical-align: 2px; box-sizing: border-box; }
+@media (max-width: 640px) {
+  body.ws .head .tabs { gap: 8px; }
+  body.ws .ws-back span { display: none; }
+  body.ws .ws-back { padding: 0 8px; }
+  body.ws-admin .ws-back { font-size: inherit; }
+  .ws-name { font-size: 19px; }
+  .ws-label { font-size: 10px; letter-spacing: .1em; }
+  .ws-tabbar { margin: 4px -10px 0; padding: 0 4px; gap: 0; }
+  .ws-tabbar button { flex: 1 1 0; min-width: 0; padding: 0 4px; font-size: 15px; }
+  .pub-note { padding: 6px 12px; font-size: 14px; }
 }

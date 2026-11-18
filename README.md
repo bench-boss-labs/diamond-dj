@@ -18,10 +18,14 @@ Roles are read at Check for updates. A device that has never checked Drive can s
 The Admin can try the other roles with Settings › Advanced › View as.
 
 - **Team setup:** Roster & walk-ups, Team songs, Music (add team songs to a category, hide one),
-  Team info (name, short name, logo and colours), Publish (the team file, team songs, announcements).
+  Team info (name, short name, logo and colours).
 - **Admin:** Teams (summary, each team's status and organizers, **+ Add a team**), People (Drive
   sharing: add, change, remove; warnings), Common songs, Music categories (name, colour, order,
-  common songs), Publish (the common library).
+  common songs).
+- **Settings › Publish** (like Rinkside DJ): the common library (Admin) and each team this device can
+  publish, with what changed and a Publish button that opens that publish screen. A gold dot on the
+  gear and a note under the Team setup / Admin header mean something is waiting. Team setup and Admin
+  use plain underline tabs in a row of their own.
 
 ### Version 0.9
 

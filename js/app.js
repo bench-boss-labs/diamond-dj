@@ -739,28 +739,36 @@ async function deleteSong(s) {
 
 /* ==================================================================== 7. SETTINGS, DEMO, BACKUP */
 
-function openSettings() {
+function openSettings(openGroup) {
   const row = (label, key, min, max, step, fmt) => `<div class="setting"><span>${label}</span>
     <input type="range" data-set="${key}" min="${min}" max="${max}" step="${step}" value="${settings[key]}" aria-label="${esc(label)}"><output data-out="${key}">${fmt(settings[key])}</output></div>`;
   // Manage (by role) first, then four groups that open and close: Updates, Sound, This device, Advanced
-  const teamDirty = Drive.localEdits(team) !== false && (team.players.length || team.songs.length || Object.keys(team.music).length);
-  const commonDirty = !!Drive.commonEdits() || (Drive.commonEdits() === null && library.songs.length > 0);
   const manageRow = (view, icon, title, sub, dot) => `<button class="manage-row" data-go="${view}">
       <span class="manage-icon">${icon}</span><span class="grow"><b>${title}</b><span class="sub">${sub}</span>${dot ? `<span class="manage-dot">${dot}</span>` : ''}</span>
       <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>`;
-  const group = (key, title, summary, body) => `<details class="set-group" data-group="${key}" ${(settings.openGroup || 'updates') === key ? 'open' : ''}>
+  const group = (key, title, summary, body) => `<details class="set-group" data-group="${key}" ${(openGroup || settings.openGroup || 'updates') === key ? 'open' : ''}>
       <summary><span class="grow"><b>${title}</b><span class="sub">${summary}</span></span><span class="plus" aria-hidden="true"></span></summary>
       <div class="set-body">${body}</div></details>`;
+  const pubTeams = publishableTeams();
+  const canPub = Drive.ready() && (canAdmin() || pubTeams.length > 0);
+  const pubRow = (key, badge, name, sub, hot) => `<div class="pub-row">${badge}<span class="grow"><b>${name}</b><span class="sub ${hot ? 'hot' : ''}">${sub}</span></span>
+      <button class="btn small ${hot ? 'primary' : ''}" data-pub="${esc(key)}" aria-label="Publish ${name}">Publish</button></div>`;
+  const pubSub = t => { if (teamWaiting(t)) return 'Changes to publish'; const st = Drive.state.teams[t.id]; return st && st.lastSync ? `Published ${new Date(st.lastSync).toLocaleDateString([], { month: 'short', day: 'numeric' })}` : 'Nothing to publish'; };
+  const pubCount = pubTeams.filter(teamWaiting).length + (canAdmin() && commonWaiting() ? 1 : 0);
+  const pubBody = (canAdmin() ? pubRow('common', '<span class="team-badge common-badge" style="width:40px;height:40px">ALL</span>', 'Common songs and music categories', commonWaiting() ? 'Changes to publish · every team gets them' : 'For every team · nothing to publish', commonWaiting()) : '')
+    + pubTeams.map(t => pubRow('team:' + t.id, teamBadge(t, 40), esc(t.name), pubSub(t), teamWaiting(t))).join('')
+    + '<p class="hint">Publish sends what you changed on this device to Google Drive. Everyone gets it with <b>Check for updates</b>.</p>';
   const when = Drive.state.lastCheck ? new Date(Drive.state.lastCheck).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '';
   const ICON_LINEUPS = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>';
   openDialog('Settings', `
     <div class="manage">
       <span class="section-title">Manage</span>
       ${manageRow('lineup', ICON_LINEUPS, 'Lineups', `${esc(lineup().name)} is in use · ${team.lineups.length} saved`)}
-      ${canTeam() ? manageRow('roster', ICON_TEAM, 'Team setup', `${esc(team.short || team.name)}: roster, walk-ups, team songs, music`, teamDirty ? 'Changes to publish' : '') : ''}
-      ${canAdmin() ? manageRow('cteams', ICON_ADMIN, 'Admin', 'Teams, people and access, common songs and music categories', commonDirty ? 'Changes to publish' : '') : ''}
+      ${canTeam() ? manageRow('roster', ICON_TEAM, 'Team setup', `${esc(team.short || team.name)}: roster, walk-ups, team songs, music`, '') : ''}
+      ${canAdmin() ? manageRow('cteams', ICON_ADMIN, 'Admin', 'Teams, people and access, common songs and music categories') : ''}
     </div>
     <span class="section-title">Settings</span>
+    ${canPub ? group('publish', `Publish${pubCount ? ` <span class="count-pill">${pubCount}</span>` : ''}`, pubCount ? `${pubCount} waiting to be sent to Google Drive` : 'Everything is published', pubBody) : ''}
     ${group('updates', 'Updates', when ? `Last checked ${esc(when)}` : 'Get the roster and songs from Google Drive', `<div id="driveBox" class="stack"></div>
       <p class="hint">On this device you’re <b>${ROLE_NAME[role()]}</b>${settings.viewAs ? ' (View as, under Advanced)' : ''}${Drive.state.account ? ` · ${esc(Drive.state.account)}` : ''}.
       ${!Drive.state.lastCheck ? 'Everything can be set up here until this device checks Google Drive; roles come from Drive sharing after that.' : ''}</p>`)}
@@ -788,6 +796,14 @@ function openSettings() {
     for (const o of document.querySelectorAll('.set-group')) if (o !== d) o.open = false;
   });
   for (const b of document.querySelectorAll('[data-go]')) b.onclick = () => { const v = b.dataset.go; closeDialog(); go(v); };
+  for (const b of document.querySelectorAll('[data-pub]')) b.onclick = () => {
+    const k = b.dataset.pub;
+    closeDialog();
+    if (k === 'common') return go('cpublish');
+    const id = k.slice(5);
+    if (id !== team.id) { Sound.fadeAll(); useTeam(id); toast(`Now using ${team.name}.`); }
+    go('publish');
+  };
   paintDrive();
   paintInstall();
   $('#setHelp').onclick = () => openHelp('news');
@@ -1147,6 +1163,15 @@ const dui = { phase: 'idle', remote: null, plan: null, chosen: [], keep: {}, sto
 function paintDrive() {
   const box = $('#driveBox');
   if (!box) return;
+  const pubTeams = publishableTeams();
+  const canPub = Drive.ready() && (canAdmin() || pubTeams.length > 0);
+  const pubRow = (key, badge, name, sub, hot) => `<div class="pub-row">${badge}<span class="grow"><b>${name}</b><span class="sub ${hot ? 'hot' : ''}">${sub}</span></span>
+      <button class="btn small ${hot ? 'primary' : ''}" data-pub="${esc(key)}" aria-label="Publish ${name}">Publish</button></div>`;
+  const pubSub = t => { if (teamWaiting(t)) return 'Changes to publish'; const st = Drive.state.teams[t.id]; return st && st.lastSync ? `Published ${new Date(st.lastSync).toLocaleDateString([], { month: 'short', day: 'numeric' })}` : 'Nothing to publish'; };
+  const pubCount = pubTeams.filter(teamWaiting).length + (canAdmin() && commonWaiting() ? 1 : 0);
+  const pubBody = (canAdmin() ? pubRow('common', '<span class="team-badge common-badge" style="width:40px;height:40px">ALL</span>', 'Common songs and music categories', commonWaiting() ? 'Changes to publish · every team gets them' : 'For every team · nothing to publish', commonWaiting()) : '')
+    + pubTeams.map(t => pubRow('team:' + t.id, teamBadge(t, 40), esc(t.name), pubSub(t), teamWaiting(t))).join('')
+    + '<p class="hint">Publish sends what you changed on this device to Google Drive. Everyone gets it with <b>Check for updates</b>.</p>';
   const when = Drive.state.lastCheck ? new Date(Drive.state.lastCheck).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '';
   const conn = `<details class="howto"><summary>Drive connection (organizer)</summary>
       <label class="field">Google Drive folder link<input type="url" id="drvFolder" value="${esc(settings.driveFolder || '')}" placeholder="Leave blank to use the Diamond DJ folder" autocomplete="off" spellcheck="false"></label>
@@ -1200,7 +1225,7 @@ function paintDrive() {
         <button class="btn" id="drvSwitch">Switch Google account</button></div>
       ${dui.note ? `<p class="hint">${esc(dui.note)}</p>` : ''}
       <p class="hint">${when ? `Last checked ${esc(when)}` : 'Not checked yet on this device'}${Drive.state.account ? ` · ${esc(Drive.state.account)}` : ''}</p>
-      ${canTeam() ? `<p class="hint">To send changes to everyone: <b>${canAdmin() ? 'Settings › Team setup › Publish, or Settings › Admin › Publish' : 'Settings › Team setup › Publish'}</b>.</p>` : ''}
+      ${canTeam() ? `<p class="hint">To send changes to everyone: <b>Settings › Publish</b> (a gold dot on the gear means something is waiting).</p>` : ''}
       ${conn}`;
     $('#drvCheck').onclick = startCheck;
     $('#drvSwitch').onclick = () => { Auth.forget(); Auth.signIn('check', { chooseAccount: true }); };
@@ -1338,24 +1363,60 @@ const ICON_TEAM = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy
 const ICON_ADMIN = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/></svg>';
 function renderNav() {
   const ws = TEAM_VIEWS.includes(ui.view) ? 'team' : ADMIN_VIEWS.includes(ui.view) ? 'admin' : '';
+  const pub = ui.view === 'publish' || ui.view === 'cpublish';
   document.body.classList.toggle('ws-team', ws === 'team');
   document.body.classList.toggle('ws-admin', ws === 'admin');
   document.body.classList.toggle('ws-lineup', ui.view === 'lineup');
-  const tab = (v, label, badge) => `<button data-view="${v}"${ui.view === v ? ' aria-current="page"' : ''}>${label}${badge ? '<span class="tab-dot" aria-label="not published"></span>' : ''}</button>`;
-  const teamDirty = Drive.localEdits(team) !== false && (team.players.length || team.songs.length || Object.keys(team.music).length);
-  const commonDirty = !!Drive.commonEdits() || (Drive.commonEdits() === null && library.songs.length > 0);
-  let html;
-  if (ws === 'team') html = `<button class="ws-back" data-view="game"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>Game</button>
-    <div class="tab-group"><span class="group-label in-game">Team · ${esc(team.short || team.name)}</span><div class="group game ws-tabs">
-      ${tab('roster', 'Roster<span class="wide-only">&nbsp;&amp; walk-ups</span>')}${tab('songs', 'Team songs')}${tab('music', 'Music')}${tab('teaminfo', 'Team info')}${tab('publish', 'Publish', teamDirty)}</div></div>`;
-  else if (ws === 'admin') html = `<button class="ws-back" data-view="game"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>Game</button>
-    <div class="tab-group"><span class="group-label in-game">Diamond DJ Admin · all teams</span><div class="group game ws-tabs">
-      ${tab('cteams', 'Teams')}${tab('cpeople', 'People')}${tab('csongs', '<span class="wide-only">Common&nbsp;</span>Songs')}${tab('cmusic', '<span class="wide-only">Music categories</span><span class="phone-only">Music</span>')}${tab('cpublish', 'Publish', commonDirty)}</div></div>`;
-  else if (ui.view === 'lineup') html = `<button class="ws-back" data-view="game"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>Game</button>
-    <span class="ws-title">Lineups</span>`;
+  document.body.classList.toggle('ws', !!ws || ui.view === 'lineup');
+  const back = (label = 'Game', id = '') => `<button class="ws-back" ${id ? `id="${id}"` : 'data-view="game"'} aria-label="Back to ${label === 'Game' ? 'the game' : label}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg><span>${label}</span></button>`;
+  const title = (label, name) => `<span class="ws-head"><span class="ws-label">${label}</span><span class="ws-name">${name}</span></span>`;
+  // 1.0: plain underline tabs in their own row; Publish lives in Settings › Publish
+  const tab = (v, label) => `<button data-view="${v}"${ui.view === v ? ' aria-current="page"' : ''}>${label}</button>`;
+  let html = '', tabs = '';
+  if (pub) html = back('Settings', 'pubBack') + title('Publish', esc(ui.view === 'cpublish' ? 'Common songs' : team.short || team.name));
+  else if (ws === 'team') {
+    html = back() + title('Team setup', esc(team.short || team.name));
+    tabs = tab('roster', 'Roster') + tab('songs', '<span class="wide-only">Team&nbsp;</span>Songs') + tab('music', 'Music') + tab('teaminfo', '<span class="wide-only">Team&nbsp;</span>Info');
+  } else if (ws === 'admin') {
+    html = back() + title('Diamond DJ Admin', 'All teams');
+    tabs = tab('cteams', 'Teams') + tab('cpeople', 'People') + tab('csongs', '<span class="wide-only">Common&nbsp;</span>Songs') + tab('cmusic', '<span class="wide-only">Music categories</span><span class="phone-only">Music</span>');
+  } else if (ui.view === 'lineup') html = back() + title('Game', 'Lineups');
   // the Game screen: nothing here. Lineups, Team and Admin are in Settings › Manage
-  else html = '';
   $('#nav').innerHTML = html;
+  $('#wsTabs').innerHTML = tabs;
+  $('#wsTabs').hidden = !tabs || pub;
+  if ($('#pubBack')) $('#pubBack').onclick = () => { go('game'); openSettings('publish'); };
+  paintPublishReminders(ws);
+}
+
+/* ---------------- what's waiting to be published (1.0): a dot on the gear, a note on Team setup and Admin */
+function teamWaiting(t) {
+  const e = Drive.localEdits(t);
+  return e === true || (e === null && (t.players.length || t.songs.length || Object.keys(t.music).length));
+}
+function commonWaiting() {
+  const e = Drive.commonEdits();
+  return e === true || (e === null && library.songs.length > 0);
+}
+// the teams this device can publish: every team for an Admin, otherwise the teams it organizes
+function publishableTeams() {
+  return Object.values(teams).filter(t => RANK[role(t)] >= 1).sort((a, b) => a.name.localeCompare(b.name));
+}
+function paintPublishReminders(ws) {
+  const locked = settings.locked;
+  const waitingTeams = publishableTeams().filter(teamWaiting);
+  const common = canAdmin() && commonWaiting();
+  $('#settingsBtn').classList.toggle('has-dot', !locked && Drive.ready() && (common || waitingTeams.length > 0));
+  let text = '';
+  if (!locked && Drive.ready()) {
+    if (ws === 'team' && teamWaiting(team)) text = `${team.short || team.name} has changes to publish`;
+    if (ws === 'admin') {
+      const n = waitingTeams.length + (common ? 1 : 0);
+      if (n) text = common && !waitingTeams.length ? 'The common songs have changes to publish' : `${n} thing${n === 1 ? '' : 's'} to publish`;
+    }
+  }
+  $('#pubNoteText').textContent = text;
+  $('#pubNote').hidden = !text;
 }
 
 /* ---------------- Team screen › Team info */
@@ -1409,7 +1470,7 @@ function paintPublish() {
         ${p.firstTime && !common ? `A new folder, <b>${esc(p.folderName)}</b>, is made for the team.` : ''}</p>
       ${p.since ? `<div class="warn"><b>Someone published ${common ? 'the common library' : 'this team'} after this device last got it.</b> Get the latest first, so your publish doesn’t undo their changes.
         <div class="row"><button class="btn navy" id="pubLatest">Get latest first</button></div></div>` : ''}
-      ${p.needsCommon && p.needsCommon.length ? `<div class="warn"><b>${p.needsCommon.length} common song${p.needsCommon.length === 1 ? ' isn’t' : 's aren’t'} in the published common library yet</b> (${esc(p.needsCommon.slice(0, 3).map(s => s.title).join(', '))}${p.needsCommon.length > 3 ? '…' : ''}), so other devices won’t have ${p.needsCommon.length === 1 ? 'it' : 'them'}. The Diamond DJ Admin publishes the common library first (Admin › Publish).</div>` : ''}
+      ${p.needsCommon && p.needsCommon.length ? `<div class="warn"><b>${p.needsCommon.length} common song${p.needsCommon.length === 1 ? ' isn’t' : 's aren’t'} in the published common library yet</b> (${esc(p.needsCommon.slice(0, 3).map(s => s.title).join(', '))}${p.needsCommon.length > 3 ? '…' : ''}), so other devices won’t have ${p.needsCommon.length === 1 ? 'it' : 'them'}. The Diamond DJ Admin publishes the common songs first (Settings › Publish).</div>` : ''}
       ${p.removed && p.removed.length ? `<p class="hint">${p.removed.length} song${p.removed.length === 1 ? ' that’s' : 's that are'} in Drive’s common library ${p.removed.length === 1 ? 'isn’t' : 'aren’t'} on this device and will be left out of it (the files stay in Drive).</p>` : ''}
       ${p.notOnDevice.length ? `<p class="hint">${p.notOnDevice.length} file${p.notOnDevice.length === 1 ? ' isn’t' : 's aren’t'} on this device, so ${p.notOnDevice.length === 1 ? 'it' : 'they'} can’t be sent.</p>` : ''}
       <div class="row"><button class="btn navy" id="pubGo">${p.since ? 'Publish anyway' : 'Publish now'}</button><button class="btn" id="pubCancel">Cancel</button></div>`;
@@ -1447,7 +1508,7 @@ function go(view) {
   render();
 }
 
-document.querySelector('.tabs').addEventListener('click', e => {
+document.querySelector('.head').addEventListener('click', e => {
   const b = e.target.closest('[data-view]');
   if (b) go(b.dataset.view);
 });
@@ -1740,7 +1801,8 @@ phoneQuery.addEventListener('change', () => { if (!drag && !dlg.open) render(); 
 $('#fadeAll').addEventListener('click', () => Sound.fadeAll(settings.fadeSeconds));
 $('#stopAll').addEventListener('click', () => Sound.stopAll());
 $('#master').addEventListener('input', e => { settings.masterVolume = +e.target.value; Sound.setMaster(settings.masterVolume); saveSettings(); });
-$('#settingsBtn').addEventListener('click', openSettings);
+$('#settingsBtn').addEventListener('click', () => openSettings());
+$('#pubNoteGo').addEventListener('click', () => openSettings('publish'));
 $('#helpBtn').addEventListener('click', () => openHelp());
 $('#teamName').addEventListener('click', openTeams);
 let dockFrame = 0;
@@ -1864,7 +1926,7 @@ function openHelp(section) {
 
     <div ${Drive.state.editor ? '' : 'hidden'}>
     <h3>For organizers</h3>
-    ${q('How do I send changes to every device?', `<p><b>Settings › Team setup › Publish</b> (and, for the common songs and music categories, <b>Settings › Admin › Publish</b>). It lists what will be sent (new songs, announcement clips, the team file) before anything goes. Volunteers get it the next time they tap <b>Check for updates</b>. Nothing in Drive is deleted, and Drive keeps earlier versions.</p>`)}
+    ${q('How do I send changes to every device?', `<p><b>Settings › Publish</b> lists each team you look after (and, for the Diamond DJ Admin, the common songs and music categories) with what changed. A gold dot on the gear means something is waiting. Tap <b>Publish</b> next to one: it lists what will be sent (new songs, announcement clips, the team file) before anything goes. Volunteers get it the next time they tap <b>Check for updates</b>. Nothing in Drive is deleted, and Drive keeps earlier versions.</p>`)}
     ${q('How do I add a volunteer or organizer?', `<p>The Diamond DJ Admin does it in <b>Settings › Admin › People</b>: type their email, pick the role, tap <b>Add</b>. Google emails them a link. While the app is in testing, also add them in Google Cloud (Diamond DJ project › Google Auth Platform › Audience › <b>Test users</b>).</p>`)}
     ${q('How do I add a team, or change its logo and colours?', `<p>New team: <b>Settings › Admin › Teams › + Add a team</b> (name and look, how it starts, who has access), then Publish. Logo and colours: <b>Settings › Team setup › Team info</b>, then Publish.</p>`)}
     ${q('How do I add a song or set where it starts?', `<p><b>Songs › Add songs</b> and pick MP3s. Tap a song, play it, then <b>Set start here</b> at the catchy part and <b>Set stop here</b> where it should end. Link it to a player in <b>Roster</b>, then publish.</p>`)}

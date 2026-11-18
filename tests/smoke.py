@@ -80,8 +80,8 @@ with sync_playwright() as p:
 
     # Lineup screen: duplicate and switch
     page.click('#settingsBtn'); page.wait_for_selector('[data-go="lineup"]')
-    check('Settings: Manage first, then Updates, Sound, This device, Advanced; no demo team',
-          page.locator('.manage-row').count() == 3 and page.eval_on_selector_all('.set-group', 'g => g.map(x => x.dataset.group).join()') == 'updates,sound,device,advanced'
+    check('Settings: Manage first, then Publish, Updates, Sound, This device, Advanced; no demo team',
+          page.locator('.manage-row').count() == 3 and page.eval_on_selector_all('.set-group', 'g => g.map(x => x.dataset.group).join()') == 'publish,updates,sound,device,advanced'
           and 'demo' not in page.inner_text('#dlgBody').lower())
     page.screenshot(path=f'{OUT}/settings.png')
     page.click('[data-go="lineup"]')
@@ -214,15 +214,27 @@ with sync_playwright() as p:
     check('team look: a light colour gets dark writing', page.evaluate("document.querySelector('.head').classList.contains('team-light') && getComputedStyle(document.querySelector('#teamName')).color") == 'rgb(11, 23, 48)')
     page.click('#tiLook [data-look="main"][data-color="#B42318"]')
     check('team look: counts as a change to publish', page.evaluate("Drive.localEdits(team) !== false"))
-    page.click('#teamName'); time.sleep(0.2)
+    page.evaluate("go('game')"); page.click('#teamName'); time.sleep(0.2)
     check('team picker shows the logo', page.locator('#dlg .team-badge img').count() >= 1)
     page.click('#dlgClose')
 
     # Admin › Teams
     page.click('#settingsBtn'); page.click('[data-go="cteams"]')
     check('Settings › Admin opens Admin › Teams', page.evaluate("ui.view") == 'cteams' and page.is_visible('.tiles'))
-    tabs = page.eval_on_selector_all('#nav .ws-tabs button', 'bs => bs.map(b => b.innerText.trim())')
-    check(f'Admin tabs {tabs}', tabs[:2] == ['Teams', 'People'] and len(tabs) == 5)
+    tabs = page.eval_on_selector_all('#wsTabs button', 'bs => bs.map(b => b.innerText.trim())')
+    check(f'Admin tabs, underlined, no Publish tab {tabs}', [t.replace('\xa0', ' ') for t in tabs] == ['Teams', 'People', 'Common Songs', 'Music categories'] and page.evaluate("getComputedStyle(document.querySelector('#wsTabs [aria-current]')).boxShadow").find('245, 183, 0') >= 0)
+    check('gear has a dot when something is waiting to publish', page.evaluate("document.querySelector('#settingsBtn').classList.contains('has-dot')"))
+    check('Admin shows a “to publish” note', page.is_visible('#pubNote') and 'publish' in page.inner_text('#pubNoteText'))
+    page.screenshot(path=f'{OUT}/admin-tabs.png')
+    page.click('#pubNoteGo'); time.sleep(0.3)
+    check('the note opens Settings › Publish', page.evaluate("document.querySelector('[data-group=\"publish\"]').open") and page.locator('[data-pub="common"]').count() == 1 and page.locator('[data-pub^="team:"]').count() == 1)
+    check('Settings › Publish: count and “Changes to publish”', 'Changes to publish' in page.inner_text('[data-group="publish"]') and page.locator('[data-group="publish"] .count-pill').count() == 1)
+    page.screenshot(path=f'{OUT}/settings-publish.png')
+    page.click('[data-pub^="team:"]'); time.sleep(0.3)
+    check('Publish opens on its own, with a way back to Settings', page.evaluate("ui.view") == 'publish' and page.is_visible('#pubBack') and not page.is_visible('#wsTabs'))
+    page.click('#pubBack'); time.sleep(0.3)
+    check('Back goes to Settings › Publish', page.evaluate("document.getElementById('dlg').open && document.querySelector('[data-group=\"publish\"]').open"))
+    page.click('[data-go="cteams"]'); time.sleep(0.2)
     check('Admin › Teams: tiles and the team with its status', '1' in page.inner_text('.tile') and page.locator('[data-ateam]').count() == 1 and page.is_visible('.facts'))
     page.screenshot(path=f'{OUT}/admin-teams.png')
 
@@ -257,7 +269,7 @@ with sync_playwright() as p:
     page.click('[data-afilter="new"]')
     check('Admin › Teams: filter “Not published”', page.locator('[data-ateam]').count() == 2)
     page.click('[data-afilter="all"]')
-    page.click('#teamName'); page.click('#dlg [data-team]:has-text("Burlington")'); time.sleep(0.3)
+    page.evaluate("go('game')"); page.click('#teamName'); page.click('#dlg [data-team]:has-text("Burlington")'); time.sleep(0.3)
 
     # a player's own part of a common song
     page.evaluate("go('roster')"); page.click('[data-act="pick-player"][data-id="demo_p1"]') if page.locator('[data-act="pick-player"][data-id="demo_p1"]').count() else page.evaluate("ui.playerId = 'demo_p1'; render()")
@@ -341,8 +353,8 @@ with sync_playwright() as p:
     ph.screenshot(path=f'{OUT}/music-phone.png')
     # 0.9 screens on a phone
     ph.evaluate("go('cteams')"); time.sleep(0.3)
-    fit = ph.evaluate("[...document.querySelectorAll('#nav .ws-tabs button')].every(b => b.getBoundingClientRect().right <= innerWidth)")
-    check('phone: all five Admin tabs fit on the screen', fit)
+    fit = ph.evaluate("[...document.querySelectorAll('#wsTabs button')].every(b => b.getBoundingClientRect().right <= innerWidth && b.getBoundingClientRect().width > 50)")
+    check('phone: the Admin tabs fit on the screen', fit)
     check('phone Admin › Teams: list first, no sideways scrolling', ph.is_visible('[data-ateam]') and not ph.is_visible('.facts') and ph.evaluate("document.documentElement.scrollWidth <= innerWidth + 1"))
     ph.screenshot(path=f'{OUT}/p-admin-teams.png')
     ph.click('[data-ateam]:has-text("Burlington")'); time.sleep(0.3)
