@@ -10,7 +10,7 @@
  *   7. SETTINGS, DEMO, BACKUP
  *   8. NOW PLAYING
  *   9. EVENTS AND STARTUP
- *  10. KEY MOMENTS (playing them on Game, editing them on Moments)
+ *  10. MUSIC (colour-coded categories on Game; set up in Team setup › Music and Admin › Music)
  *  11. LOCK
  *  12. HELP, INSTALL, UPDATES (release notes, install button, new-version messages)
  */
@@ -34,19 +34,19 @@ const DEFAULTS = {
 let teams = {};          // every team on this device, by id
 let team = null;         // the team in use (one of `teams`)
 let library = null;      // Model library: songs shared by every team on this device
-// game state per team on this device: lineup in use, who's up next, songs played this game, where each moment got to
+// game state per team on this device: lineup in use, who's up next, songs played this game
 const newGameState = () => ({ lineupId: null, upNext: null, lastPlayed: null, played: [], cursors: {} });
 let games = {};
 let game = newGameState();
 let settings = { ...DEFAULTS };
 const stored = new Set(); // paths of audio files on this device
 
-const ui = { view: 'game', playerId: null, songId: null, lineupId: null, songQuery: '', gameTab: 'walkups', momentId: null,
+const ui = { view: 'game', playerId: null, songId: null, lineupId: null, songQuery: '', gameTab: 'walkups', catId: null,
   phoneDetail: false, showAllBatters: false };
-const TEAM_VIEWS = ['roster', 'songs', 'moments', 'teaminfo', 'publish'];   // the Team screen (team organizers)
-const ADMIN_VIEWS = ['csongs', 'cmoments', 'cpublish'];                         // the Admin screen (Diamond DJ Admin)
+const TEAM_VIEWS = ['roster', 'songs', 'music', 'teaminfo', 'publish'];   // the Team screen (team organizers)
+const ADMIN_VIEWS = ['csongs', 'cmusic', 'cpublish'];                         // the Admin screen (Diamond DJ Admin)
 const SETUP_VIEWS = TEAM_VIEWS.concat(ADMIN_VIEWS);
-// Songs and Moments show the team's own on the Team screen, the common library's on the Admin screen
+// Songs and Music show the team's own on the Team screen, the common library's on the Admin screen
 const commonScope = () => ADMIN_VIEWS.includes(ui.view);
 
 const timers = {};
@@ -67,14 +67,14 @@ async function saveNow() {
   await Promise.all(Object.values(SAVERS).map(f => f().catch(() => {})));
 }
 
-/* Switch the device to another team: its roster, lineups, moments and game state. */
+/* Switch the device to another team: its roster, lineups, music and game state. */
 function useTeam(id) {
   if (!teams[id]) return;
   if (team) games[team.id] = game;
   team = teams[id];
   game = { ...newGameState(), ...(games[id] || {}) };
   if (!Model.findLineup(team, game.lineupId)) game.lineupId = team.lineups[0].id;
-  ui.playerId = ui.momentId = ui.lineupId = null;
+  ui.playerId = ui.catId = ui.lineupId = null;
   saveTeam(); saveGame();
 }
 function addTeam(t, { use = true } = {}) {
@@ -94,10 +94,7 @@ const player = id => team.players.find(p => p.id === id) || null;
 const pool = () => Model.poolFor(library, team);   // the songs this team can use: common and its own
 const song = id => (id ? Model.findSong(pool(), id) : null);
 const songsHere = () => (commonScope() ? library.songs : team.songs);
-const momentsHere = () => (commonScope() ? library.moments : team.moments);
-function setMomentsHere(list) { if (commonScope()) library.moments = list; else team.moments = list; }
-const findHere = id => momentsHere().find(m => m.id === id) || null;
-const gameMoments = () => Model.gameMoments(library, team);
+const gameCats = () => Model.gameMusic(library, team);
 const saveBoth = () => { saveLibrary(); saveTeam(); };
 
 /* Roles, from Google Drive sharing (read at Check for updates):
@@ -126,8 +123,8 @@ const main = $('#main');
 /* Phones get their own layouts (narrow screens); tablets and computers keep the side-by-side ones. */
 const phoneQuery = matchMedia('(max-width: 640px)');
 const phone = () => phoneQuery.matches;
-// on a phone, list screens (Roster, Songs, Moments) show the list, or one item full screen
-const BACK_LABEL = { roster: 'Roster', songs: 'Team songs', moments: 'Team moments', csongs: 'Common songs', cmoments: 'Common moments' };
+// on a phone, list screens (Roster, Songs, Music) show the list, or one item full screen
+const BACK_LABEL = { roster: 'Roster', songs: 'Team songs', music: 'Music', csongs: 'Common songs', cmusic: 'Music categories' };
 function backBar(title) {
   return `<div class="phone-back"><button class="back-btn" data-act="phone-back">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>${BACK_LABEL[ui.view]}</button>
@@ -244,16 +241,13 @@ function playingPlayerId() {
 }
 
 function renderGame() {
-  const tabs = [['walkups', 'Walkups'], ['moments', 'Moments'], ['breaks', 'Breaks']]
+  const tabs = [['walkups', 'Walk-ups'], ['music', 'Music']]
     .map(([k, label]) => `<button data-act="game-tab" data-tab="${k}" aria-pressed="${ui.gameTab === k}">${label}</button>`).join('');
   main.innerHTML = `<div class="game-wrap" data-tab="${ui.gameTab}">
     <div class="seg phone-tabs" role="group" aria-label="Show">${tabs}</div>
     <div class="cols game-cols">
       <section class="stack" data-gtab="walkups">${walkupsHtml()}</section>
-      <section class="stack">
-        <div data-gtab="moments" class="stack">${padsHtml('moments')}</div>
-        <div data-gtab="breaks" class="stack">${padsHtml('breaks')}</div>
-      </section>
+      <section class="stack" data-gtab="music">${musicHtml()}</section>
     </div></div>`;
 }
 
@@ -603,9 +597,9 @@ function renderSongs() {
         ${stepper('Volume (%)', 'volume', Math.round((s.volume ?? 1) * 100))}
       </div>
       <p class="hint">Plays ${clipText(s)}${s.length ? ` of ${mmss(s.length)}` : ''}. ${s.stop == null ? `With no stop point a walk-up plays for ${settings.walkupSeconds} seconds.` : ''}</p>
-      <div class="row"><b>Moments</b>
-        ${momentsHere().filter(m => m.songIds.includes(s.id)).map(m => `<button class="chip on" data-act="sm-remove" data-id="${esc(m.id)}" aria-label="Remove from ${esc(m.name)}">${esc(m.name)} ✕</button>`).join('')}
-        <button class="chip add" data-act="sm-add">+ Add to a moment</button></div>
+      <div class="row"><b>Music categories</b>
+        ${songCats(s).map(c => `<button class="chip on" data-act="sc-remove" data-id="${esc(c.id)}" aria-label="Remove from ${esc(c.name)}">${esc(c.name)} ✕</button>`).join('')}
+        <button class="chip add" data-act="sc-add">+ Add to a music category</button></div>
       <div class="row" style="border-top:1px solid var(--line);padding-top:12px">
         <span class="hint">${users.length ? 'Walk-up for <b>' + esc(users.map(Model.playerName).join(', ')) + '</b>' : 'Not anyone’s walk-up yet.'}</span>
         <span class="spacer"></span>
@@ -620,7 +614,7 @@ function renderSongs() {
       <input class="search" type="search" id="songSearch" placeholder="Search songs or players" value="${esc(ui.songQuery)}" autocomplete="off" aria-label="Search songs">
       <div class="list" id="songList">${list || (songsHere().length ? '<p class="hint">No songs match.</p>' : `<p class="hint">${commonScope() ? 'No common songs yet.' : `No ${esc(team.short || team.name)} songs yet: pitcher music, team favourites, anything only this team uses.`}</p>`)}</div>
       <label class="btn outline big file-btn">+ Add ${commonScope() ? 'common' : 'team'} songs<input type="file" multiple accept="audio/*,.mp3,.m4a,.wav" data-act="songs-add"></label>
-      <span class="hint">${songsHere().length} ${commonScope() ? 'common songs, for every team' : `${esc(team.short || team.name)} song${songsHere().length === 1 ? '' : 's'}`}. ${commonScope() ? '' : `Common songs (${library.songs.length}) are looked after by the Diamond DJ Admin; use them for walk-ups and moments too.`}</span>
+      <span class="hint">${songsHere().length} ${commonScope() ? 'common songs, for every team' : `${esc(team.short || team.name)} song${songsHere().length === 1 ? '' : 's'}`}. ${commonScope() ? '' : `Common songs (${library.songs.length}) are looked after by the Diamond DJ Admin; use them for walk-ups and music too.`}</span>
     </aside>${editor}</div>`;
   if (s && stored.has(s.path)) loadWave(s);
 }
@@ -734,7 +728,7 @@ function deletePrompt(s) {
 }
 async function deleteSong(s) {
   for (const t of Object.values(teams)) Model.removeSongEverywhere(t, s.id);
-  for (const m of library.moments) m.songIds = m.songIds.filter(x => x !== s.id);
+  for (const c of library.categories) c.songIds = c.songIds.filter(x => x !== s.id);
   library.songs = library.songs.filter(x => x.id !== s.id);
   team.songs = team.songs.filter(x => x.id !== s.id);
   delete peaksCache[s.id]; Store.remove('peaks:' + s.id).catch(() => {});
@@ -749,7 +743,7 @@ function openSettings() {
   const row = (label, key, min, max, step, fmt) => `<div class="setting"><span>${label}</span>
     <input type="range" data-set="${key}" min="${min}" max="${max}" step="${step}" value="${settings[key]}" aria-label="${esc(label)}"><output data-out="${key}">${fmt(settings[key])}</output></div>`;
   // Manage (by role) first, then four groups that open and close: Updates, Sound, This device, Advanced
-  const teamDirty = Drive.localEdits(team) !== false && (team.players.length || team.songs.length || team.moments.length);
+  const teamDirty = Drive.localEdits(team) !== false && (team.players.length || team.songs.length || Object.keys(team.music).length);
   const commonDirty = !!Drive.commonEdits() || (Drive.commonEdits() === null && library.songs.length > 0);
   const manageRow = (view, icon, title, sub, dot) => `<button class="manage-row" data-go="${view}">
       <span class="manage-icon">${icon}</span><span class="grow"><b>${title}</b><span class="sub">${sub}</span>${dot ? `<span class="manage-dot">${dot}</span>` : ''}</span>
@@ -763,8 +757,8 @@ function openSettings() {
     <div class="manage">
       <span class="section-title">Manage</span>
       ${manageRow('lineup', ICON_LINEUPS, 'Lineups', `${esc(lineup().name)} is in use · ${team.lineups.length} saved`)}
-      ${canTeam() ? manageRow('roster', ICON_TEAM, 'Team setup', `${esc(team.short || team.name)}: roster, walk-ups, team songs, moments`, teamDirty ? 'Changes to publish' : '') : ''}
-      ${canAdmin() ? manageRow('csongs', ICON_ADMIN, 'Admin', 'Common songs and moments for every team', commonDirty ? 'Changes to publish' : '') : ''}
+      ${canTeam() ? manageRow('roster', ICON_TEAM, 'Team setup', `${esc(team.short || team.name)}: roster, walk-ups, team songs, music`, teamDirty ? 'Changes to publish' : '') : ''}
+      ${canAdmin() ? manageRow('csongs', ICON_ADMIN, 'Admin', 'Common songs and music categories for every team', commonDirty ? 'Changes to publish' : '') : ''}
     </div>
     <span class="section-title">Settings</span>
     ${group('updates', 'Updates', when ? `Last checked ${esc(when)}` : 'Get the roster and songs from Google Drive', `<div id="driveBox" class="stack"></div>
@@ -775,7 +769,7 @@ function openSettings() {
       ${row('Walk-up length when a song has no stop point', 'walkupSeconds', 5, 30, 1, v => v + ' s')}
       ${row('Song volume under the announcement', 'duckLevel', 0, 0.6, 0.05, v => Math.round(v * 100) + '%')}
       ${row('Song comes up after the announcement over', 'riseSeconds', 0.2, 3, 0.1, v => (+v).toFixed(1) + ' s')}
-      ${row('Playlist songs overlap by', 'playlistXfade', 0, 10, 0.5, v => v + ' s')}`)}
+`)}
     ${group('device', 'This device', `${installed() ? 'Installed' : 'Not installed'} · version ${esc(window.APP_VERSION || '')}`, `
       <div id="installBox" class="stack"></div>
       <p class="hint" id="setStorage">Checking storage…</p>
@@ -904,175 +898,148 @@ function renderDock() {
       <div class="bar"><i style="width:${Math.min(100, (el / total) * 100).toFixed(1)}%"></i></div>`;
   }
   // re-draw the game list when who's playing changes
-  const sig = String(playingPlayerId()) + [...playingMomentIds()].join(',');
+  const pm = playingMusic();
+  const sig = String(playingPlayerId()) + [...pm.songs].join(',') + '|' + [...pm.shuffles].join(',');
   if (sig !== lastPlayingSig) { lastPlayingSig = sig; if (ui.view === 'game' && !dlg.open) renderGame(); }
 }
 
-/* ==================================================================== 10. KEY MOMENTS */
+/* ==================================================================== 10. MUSIC (categories) */
+/* The Game screen's Music: colour-coded categories (Warm-up, Pitchers…). Each shows a Shuffle
+   button (a song not played yet this game) and a button per song: tap to play, tap again to fade.
+   Categories and their common songs belong to the common library (Admin › Music); a team adds
+   its own songs to them and can hide one it doesn't use (Team setup › Music). */
 
-const MODE_TEXT = { random: 'random', order: 'in order', playlist: 'playlist' };
-let activePlaylist = null; // { momentId, ctl }
+const findCat = id => library.categories.find(c => c.id === id) || null;
+const lightColor = hex => { const n = parseInt(String(hex).slice(1), 16); return (0.299 * (n >> 16) + 0.587 * (n >> 8 & 255) + 0.114 * (n & 255)) > 160; };
+const onColor = hex => (lightColor(hex) ? '#0B2447' : '#FFFFFF');
+const ICON_SHUFFLE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>';
 
-function momentSongs(m) { return m.songIds.map(song).filter(Boolean); }
-function playingMomentIds() {
-  return new Set(Sound.playing().filter(t => t.momentId && (t.state === 'playing' || t.state === 'loading')).map(t => t.momentId));
+function playingMusic() {
+  const live = Sound.playing().filter(t => t.musicId && (t.state === 'playing' || t.state === 'loading'));
+  return { songs: new Set(live.map(t => t.musicId)), shuffles: new Set(live.filter(t => t.shuffleCat).map(t => t.shuffleCat)) };
 }
 
-function padsHtml(section) {
-  const list = gameMoments().filter(m => m.section === section);
-  const title = section === 'moments' ? 'Key moments' : 'Warmups &amp; breaks';
-  const playing = playingMomentIds();
-  const pads = list.map(m => {
-    const n = momentSongs(m).length;
-    const on = playing.has(m.id);
-    const meta = !n ? 'No songs yet'
-      : on ? (m.mode === 'playlist' ? 'Playing · tap for next song' : 'Playing · tap to fade')
-      : `${n} song${n > 1 ? 's' : ''} · ${MODE_TEXT[m.mode]}`;
-    return `<button class="pad ${section === 'breaks' ? 'pad-break' : 'c-' + m.color} ${on ? 'on' : ''} ${n ? '' : 'empty-pad'}" data-act="moment" data-id="${esc(m.id)}">
-      <span class="pad-name">${esc(m.name)}</span><span class="pad-meta">${meta}</span></button>`;
-  }).join('');
-  return `<div class="row"><span class="section-title">${title}</span><span class="spacer"></span>
-      ${section === 'moments' ? '<span class="hint">Tap to play · tap again to fade</span>' : ''}</div>
-    ${list.length ? `<div class="pads">${pads}</div>` : `<p class="hint">None yet.</p>`}`;
-}
-
-async function playMoment(m) {
-  const playing = playingMomentIds();
-  if (playing.has(m.id)) {
-    // second tap: a playlist moves to its next song, anything else fades out
-    if (m.mode === 'playlist' && activePlaylist && activePlaylist.momentId === m.id && activePlaylist.ctl.live) return activePlaylist.ctl.skip();
-    for (const t of Sound.tracks) if (t.momentId === m.id) t.fade(settings.fadeSeconds);
-    return;
-  }
-  if (!momentSongs(m).length) return toast(`${m.name} has no songs yet.`);
-  const itemFor = pick => {
-    const s = song(pick.songId);
-    Model.notePlayed(m, pool(), game, s.id);
-    saveGame();
-    const c = Model.clipOf(s);
-    return { path: c.path, start: c.start, stop: c.stop, fadeOut: c.fadeOut, level: c.volume, label: `${m.name} · ${s.title}`, momentId: m.id, clipLength: c.length };
+function musicHtml() {
+  const cats = gameCats();
+  if (!cats.length) return '<span class="section-title">Music</span><p class="hint">No music categories yet.</p>';
+  const cur = cats.find(c => c.id === ui.catId) || cats[0];
+  ui.catId = cur.id;
+  const live = playingMusic(), played = new Set(game.played || []);
+  const songs = cur.songIds.map(song).filter(Boolean);
+  const chips = cats.map(c => `<button class="cat-chip" data-act="cat" data-id="${esc(c.id)}" aria-pressed="${c === cur}" style="--c:${esc(c.color)};--fg:${onColor(c.color)}">
+      <i></i><span>${esc(c.name)}</span><em>${c.songIds.filter(id => song(id)).length}</em></button>`).join('');
+  const style = `--c:${esc(cur.color)};--fg:${onColor(cur.color)}`;
+  const left = songs.filter(s => !played.has(s.id)).length;
+  const shuffleOn = live.shuffles.has(cur.id);
+  const shuffle = songs.length > 1 ? `<button class="mpad shuffle ${shuffleOn ? 'on' : ''}" data-act="shuffle" data-id="${esc(cur.id)}" style="${style}">
+      <span class="mpad-name">${ICON_SHUFFLE}Shuffle</span><span class="mpad-meta">${shuffleOn ? 'Playing · tap to fade' : `${left || songs.length} of ${songs.length} not played yet`}</span></button>` : '';
+  const pad = s => {
+    const on = live.songs.has(s.id) && !shuffleOn, was = played.has(s.id);
+    return `<button class="mpad ${on ? 'on' : ''} ${was && !on ? 'played' : ''} ${stored.has(s.path) ? '' : 'missing'}" data-act="music" data-id="${esc(s.id)}" style="${style}">
+      <span class="mpad-name">${esc(s.title)}</span><span class="mpad-meta">${on ? 'Playing · tap to fade' : esc(s.artist || '')}</span>${was && !on ? '<span class="mpad-tag">Played</span>' : ''}</button>`;
   };
+  return `<div class="row"><span class="section-title">Music</span><span class="spacer"></span><span class="hint">Tap to play · tap again to fade</span></div>
+    <div class="cat-chips" role="group" aria-label="Music categories">${chips}</div>
+    ${songs.length ? `<div class="mpads">${shuffle}${songs.map(pad).join('')}</div>`
+      : `<p class="hint">No songs in ${esc(cur.name)} yet.${canTeam() && !settings.locked ? ' Add some in Settings › Team setup › Music.' : ''}</p>`}`;
+}
+
+async function playMusic(s, cat, shuffleCat = null) {
+  Model.notePlayed(game, s.id);
+  saveGame();
+  const c = Model.clipOf(s);
+  const layer = c.length != null && c.length < settings.layerSeconds; // a short clip plays over the music
   try {
-    if (m.mode === 'playlist') {
-      const ctl = await Sound.playlist(() => { const pick = Model.pickSong(m, pool(), game); return pick ? itemFor(pick) : null; },
-        { xfade: settings.playlistXfade, meta: { momentId: m.id } });
-      activePlaylist = { momentId: m.id, ctl };
-    } else {
-      const item = itemFor(Model.pickSong(m, pool(), game));
-      const layer = item.clipLength != null && item.clipLength < settings.layerSeconds;
-      await Sound.playOne({ ...item, kind: 'sound' }, { layer });
-    }
+    await Sound.playOne({ path: c.path, start: c.start, stop: c.stop, fadeOut: c.fadeOut, level: c.volume, label: `${cat.name} · ${s.title}`, kind: 'sound', musicId: s.id, shuffleCat }, { layer });
   } catch (e) {
     console.warn(e);
     toast('That song’s file isn’t on this device.');
   }
 }
-
-function momentList(section) {
-  return momentsHere().filter(m => m.section === section).map(m => {
-    const n = momentSongs(m).length;
-    return `<button class="item ${m.id === ui.momentId ? 'sel' : ''}" data-act="pick-moment" data-id="${esc(m.id)}">
-      <span class="swatch ${section === 'breaks' ? 'c-light' : 'c-' + m.color}"></span>
-      <span class="grow"><span class="name">${esc(m.name)}</span></span>
-      <span class="sub">${n} · ${MODE_TEXT[m.mode]}</span></button>`;
-  }).join('') || '<p class="hint">None yet.</p>';
+function tapMusic(songId) {
+  const live = playingMusic();
+  if (live.songs.has(songId)) { for (const t of Sound.tracks) if (t.musicId === songId) t.fade(settings.fadeSeconds); return; }
+  const s = song(songId), cat = gameCats().find(c => c.id === ui.catId);
+  if (s && cat) playMusic(s, cat);
+}
+function tapShuffle(catId) {
+  if (playingMusic().shuffles.has(catId)) { for (const t of Sound.tracks) if (t.shuffleCat === catId) t.fade(settings.fadeSeconds); return; }
+  const cat = gameCats().find(c => c.id === catId);
+  const id = cat && Model.pickShuffle(cat, pool(), game);
+  if (!id) return toast(`${cat ? cat.name : 'This category'} has no songs yet.`);
+  playMusic(song(id), cat, catId);
 }
 
-/* Team screen: the common moments, with Show switches; a selected one shows its songs (locked)
-   and the team's own songs added to it. */
-function commonMomentList(section) {
-  return library.moments.filter(m => m.section === section).map(m => {
-    const shown = !team.hidden.includes(m.id), extra = (team.extra[m.id] || []).length;
-    return `<button class="item ${m.id === ui.momentId ? 'sel' : ''} ${shown ? '' : 'hidden-moment'}" data-act="pick-moment" data-id="${esc(m.id)}">
-      <span class="swatch ${section === 'breaks' ? 'c-light' : 'c-' + m.color}"></span>
-      <span class="grow"><span class="name">${esc(m.name)}</span></span>
-      <span class="sub">${shown ? `${m.songIds.length}${extra ? ` + ${extra} team` : ''}` : 'Hidden'}</span></button>`;
-  }).join('') || '<p class="hint">None.</p>';
+/* ---------------- setting up Music: Admin › Music (categories and common songs), Team setup › Music */
+function catList() {
+  return library.categories.map(c => {
+    const mine = (team.music[c.id] || []).length, hidden = team.hiddenCats.includes(c.id);
+    const sub = commonScope() ? `${c.songIds.length} song${c.songIds.length === 1 ? '' : 's'}`
+      : hidden ? `Hidden on ${esc(team.short || team.name)}` : `${c.songIds.length} common${mine ? ` + ${mine} team` : ''}`;
+    return `<button class="item ${c.id === ui.catId ? 'sel' : ''} ${hidden && !commonScope() ? 'hidden-moment' : ''}" data-act="pick-cat" data-id="${esc(c.id)}">
+      <span class="swatch" style="background:${esc(c.color)}"></span><span class="grow"><span class="name">${esc(c.name)}</span></span><span class="sub">${sub}</span></button>`;
+  }).join('') || '<p class="hint">No categories yet.</p>';
 }
-function commonMomentEditor(m) {
-  const shown = !team.hidden.includes(m.id);
-  const row = (s, mine) => `<div class="edit-row"><span class="grow"><span class="name">${esc(Model.songLabel(s))}</span><span class="sub">${mine ? 'Team song' : 'Common song'}${stored.has(s.path) ? '' : ' · file not on this device'}</span></span>
-      <button class="btn small" data-act="m-listen" data-id="${esc(s.id)}">Listen</button>
-      ${mine ? `<button class="btn small square danger" data-act="cm-remove" data-id="${esc(s.id)}" aria-label="Remove from ${esc(m.name)}">✕</button>` : '<span class="lock-mark" role="img" aria-label="Set by the Diamond DJ Admin"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span>'}</div>`;
-  const common = m.songIds.map(song).filter(Boolean), mine = (team.extra[m.id] || []).map(song).filter(Boolean);
-  return `<section class="panel stack" style="gap:16px">${backBar(m.name)}
-    <div class="row"><span class="lineup-title">${esc(m.name)}</span><span class="pill common-pill">Common</span></div>
-    <p class="hint">A common moment, set up by the Diamond DJ Admin for every team (${MODE_TEXT[m.mode]}). ${esc(team.short || team.name)} can hide it, or add its own songs to it.</p>
-    <label class="check"><input type="checkbox" data-act="cm-show" ${shown ? 'checked' : ''}>Show ${esc(m.name)} on ${esc(team.short || team.name)}’s Game screen</label>
-    <div class="stack"><b>Common songs · ${common.length}</b><div class="list">${common.map(s => row(s, false)).join('') || '<p class="hint">None yet.</p>'}</div></div>
-    <div class="stack"><div class="row"><b>${esc(team.short || team.name)} songs · ${mine.length}</b><span class="spacer"></span>
-      <button class="btn outline" data-act="cm-add">+ Add team songs</button></div>
-      <div class="list">${mine.map(s => row(s, true)).join('') || '<p class="hint">None. Added songs play along with the common ones.</p>'}</div></div>
-  </section>`;
+function catSongRows(c, list, editable, kind) {
+  return list.map(song).filter(Boolean).map((s, i, all) => `<div class="edit-row"><span class="grow"><span class="name">${esc(Model.songLabel(s))}</span>
+      <span class="sub">${kind === 'team' && !team.songs.includes(s) ? 'Common song' : kind === 'team' ? 'Team song' : 'Common song'}${stored.has(s.path) ? '' : ' · file not on this device'}</span></span>
+      <button class="btn small" data-act="listen" data-id="${esc(s.id)}">Listen</button>
+      ${editable ? `<button class="btn small square" data-act="cs-up" data-list="${kind}" data-id="${esc(s.id)}" aria-label="Move up" ${i ? '' : 'disabled'}>↑</button>
+        <button class="btn small square" data-act="cs-down" data-list="${kind}" data-id="${esc(s.id)}" aria-label="Move down" ${i < all.length - 1 ? '' : 'disabled'}>↓</button>
+        <button class="btn small square danger" data-act="cs-remove" data-list="${kind}" data-id="${esc(s.id)}" aria-label="Remove from ${esc(c.name)}">✕</button>`
+        : '<span class="lock-mark" role="img" aria-label="Set by the Diamond DJ Admin"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span>'}</div>`).join('');
 }
-
-function renderMoments() {
-  const cm = !commonScope() && library.moments.find(x => x.id === ui.momentId);
-  if (cm) {
-    main.innerHTML = `<div class="cols wide-left ${listMode()}">${momentsAside()}${commonMomentEditor(cm)}</div>`;
-    return;
-  }
-  if (ui.momentId && !findHere(ui.momentId)) ui.momentId = null;
-  if (!ui.momentId && momentsHere().length) ui.momentId = momentsHere()[0].id;
-  const m = findHere(ui.momentId);
-  let editor = `<div class="empty"><p><b>No ${commonScope() ? 'common' : 'team'} moments yet.</b></p><p>Tap <b>+ New moment</b> to make a button for ${commonScope() ? 'every team’s' : 'this team’s'} Game screen.</p></div>`;
-  if (m) {
-    const songs = momentSongs(m);
-    const ordered = m.mode !== 'random';
-    const rows = songs.map((s, i) => `<div class="edit-row">
-        <span class="slot">${ordered ? i + 1 : ''}</span>
-        <span class="grow"><span class="name">${esc(Model.songLabel(s))}</span><span class="sub">${stored.has(s.path) ? '' : 'File not on this device · '}${s.stop != null ? clipText(s) : 'from ' + mmss(s.start) + ' to the end'}</span></span>
-        <button class="btn small" data-act="m-listen" data-id="${esc(s.id)}">Listen</button>
-        ${ordered ? `<button class="btn small square" data-act="m-song-up" data-id="${esc(s.id)}" aria-label="Move earlier" ${i ? '' : 'disabled'}>↑</button>
-        <button class="btn small square" data-act="m-song-down" data-id="${esc(s.id)}" aria-label="Move later" ${i < songs.length - 1 ? '' : 'disabled'}>↓</button>` : ''}
-        <button class="btn small square danger" data-act="m-song-remove" data-id="${esc(s.id)}" aria-label="Remove from ${esc(m.name)}">✕</button></div>`).join('');
-    const sameSection = momentsHere().filter(x => x.section === m.section);
-    const pos = sameSection.indexOf(m);
-    const swatches = Model.COLORS.map(c => `<button class="swatch-btn c-${c}" data-act="m-color" data-v="${c}" aria-pressed="${m.color === c}" aria-label="${c}"></button>`).join('');
-    editor = `<section class="panel stack" style="gap:16px">${backBar(m.name)}
-      <div class="grid2 moment-fields">
-        <label class="field">Button name<input type="text" data-mf="name" value="${esc(m.name)}" autocomplete="off"></label>
-        ${m.section === 'moments' ? `<div class="field">Button colour<div class="row">${swatches}</div></div>` : '<div></div>'}
-      </div>
-      <div class="row"><b>Shows under</b>
-        <div class="seg" role="group" aria-label="Shows under">
-          <button data-act="m-section" data-v="moments" aria-pressed="${m.section === 'moments'}">Key moments</button>
-          <button data-act="m-section" data-v="breaks" aria-pressed="${m.section === 'breaks'}">Warmups &amp; breaks</button></div></div>
-      <div class="row"><b>When tapped, play</b>
-        <div class="seg" role="group" aria-label="When tapped, play">
-          <button data-act="m-mode" data-v="random" aria-pressed="${m.mode === 'random'}">A random song</button>
-          <button data-act="m-mode" data-v="order" aria-pressed="${m.mode === 'order'}">The next song in order</button>
-          <button data-act="m-mode" data-v="playlist" aria-pressed="${m.mode === 'playlist'}">A playlist (keeps going)</button></div></div>
-      ${m.mode === 'random' ? `<label class="check"><input type="checkbox" data-mf="skipPlayed" ${m.skipPlayed ? 'checked' : ''}>Skip songs already played this game</label>` : ''}
-      <p class="hint">${m.mode === 'playlist' ? `Plays the songs one after another, overlapping by ${settings.playlistXfade} s. A second tap skips to the next song; Fade out stops it.`
-        : m.mode === 'order' ? 'Each tap plays the next song in the list. A second tap while it plays fades it out.'
-        : 'Each tap plays a different song. A second tap while it plays fades it out.'} Songs play from their start point to their stop point, or to the end. Clips under ${settings.layerSeconds} s play over the music.</p>
-      <div class="stack">
-        <div class="row"><b>Songs in ${esc(m.name)} · ${songs.length}</b><span class="spacer"></span>
-          <button class="btn outline" data-act="m-add-songs">+ Add songs from the library</button></div>
-        <div class="list">${rows || '<p class="hint">No songs yet.</p>'}</div>
-      </div>
-      <div class="row" style="border-top:1px solid var(--line);padding-top:12px">
-        <button class="btn" data-act="m-move" data-d="-1" ${pos > 0 ? '' : 'disabled'}>Move earlier</button>
-        <button class="btn" data-act="m-move" data-d="1" ${pos < sameSection.length - 1 ? '' : 'disabled'}>Move later</button>
-        <span class="spacer"></span><button class="btn danger" data-act="m-delete">Delete this moment</button></div>
+function renderMusicSetup() {
+  const admin = commonScope();
+  if (!findCat(ui.catId)) ui.catId = library.categories.length ? library.categories[0].id : null;
+  const c = findCat(ui.catId);
+  const aside = `<aside class="stack">
+      <span class="section-title">${admin ? 'Music categories' : `Music on ${esc(team.short || team.name)}`}</span>
+      <p class="hint">${admin ? 'For every team. Each category is a colour-coded group of songs on the Game screen.' : 'Categories come from the Diamond DJ Admin. Tap one to add your team’s songs to it, or hide it.'}</p>
+      <div class="list">${catList()}</div>
+      ${admin ? '<button class="btn outline big" data-act="cat-new">+ New category</button>' : ''}</aside>`;
+  let editor = '<div class="empty"><p><b>No categories yet.</b></p></div>';
+  if (c && admin) {
+    const i = library.categories.indexOf(c);
+    editor = `<section class="panel stack" style="gap:16px">${backBar(c.name)}
+      <label class="field">Category name<input type="text" data-cf="name" value="${esc(c.name)}" autocomplete="off"></label>
+      <div class="field">Colour<div class="row swatches">${Model.CAT_COLORS.map(x => `<button class="swatch-btn ${x === c.color ? 'on' : ''}" data-act="cat-color" data-color="${x}" style="background:${x}" aria-label="Colour ${x}" aria-pressed="${x === c.color}"></button>`).join('')}</div></div>
+      <div class="stack"><div class="row"><b>Common songs · ${c.songIds.length}</b><span class="spacer"></span><button class="btn outline" data-act="cs-add">+ Add songs</button></div>
+        <div class="list">${catSongRows(c, c.songIds, true, 'common') || '<p class="hint">None yet. Teams can add their own too.</p>'}</div></div>
+      <div class="row"><button class="btn" data-act="cat-move" data-dir="-1" ${i ? '' : 'disabled'}>Move earlier</button><button class="btn" data-act="cat-move" data-dir="1" ${i < library.categories.length - 1 ? '' : 'disabled'}>Move later</button>
+        <span class="spacer"></span><button class="btn danger" data-act="cat-delete">Delete category</button></div>
+    </section>`;
+  } else if (c) {
+    const shown = !team.hiddenCats.includes(c.id), mine = team.music[c.id] || [];
+    editor = `<section class="panel stack" style="gap:16px">${backBar(c.name)}
+      <div class="row"><span class="swatch big" style="background:${esc(c.color)}"></span><span class="lineup-title">${esc(c.name)}</span></div>
+      <label class="check"><input type="checkbox" data-act="cat-show" ${shown ? 'checked' : ''}>Show ${esc(c.name)} on ${esc(team.short || team.name)}’s Game screen</label>
+      <div class="stack"><b>Common songs · ${c.songIds.length}</b><div class="list">${catSongRows(c, c.songIds, false, 'common') || '<p class="hint">None.</p>'}</div></div>
+      <div class="stack"><div class="row"><b>${esc(team.short || team.name)} songs · ${mine.length}</b><span class="spacer"></span><button class="btn outline" data-act="cs-add">+ Add songs</button></div>
+        <div class="list">${catSongRows(c, mine, true, 'team') || '<p class="hint">None yet. They show after the common songs.</p>'}</div></div>
     </section>`;
   }
-  main.innerHTML = `<div class="cols wide-left ${listMode()}">${momentsAside()}${editor}</div>`;
+  main.innerHTML = `<div class="cols wide-left ${listMode()}">${aside}${editor}</div>`;
 }
-function momentsAside() {
-  const mine = commonScope() ? 'Common' : esc(team.short || team.name);
-  const common = commonScope() ? '' : `<span class="section-title">Common moments</span>
-      <p class="hint">From the Diamond DJ Admin, for every team. Tap one to hide it or add team songs.</p>
-      <div class="list">${commonMomentList('moments')}${commonMomentList('breaks')}</div>`;
-  return `<aside class="stack">${common}
-      <span class="section-title"${common ? ' style="margin-top:8px"' : ''}>${mine} key moments</span><div class="list">${momentList('moments')}</div>
-      <span class="section-title" style="margin-top:8px">${mine} warmups &amp; breaks</span><div class="list">${momentList('breaks')}</div>
-      <button class="btn outline big" data-act="m-new">+ New ${commonScope() ? 'common' : 'team'} moment or playlist</button>
-    </aside>`;
+const catSongs = (c, kind) => (kind === 'common' ? c.songIds : (team.music[c.id] = team.music[c.id] || []));
+function openCatSongPicker(c) {
+  const admin = commonScope();
+  openToggleList(`Songs in ${c.name}`,
+    () => (admin ? library.songs : [...team.songs, ...library.songs.filter(s => !c.songIds.includes(s.id))])
+      .slice().sort((a, b) => a.title.localeCompare(b.title)).map(s => ({ id: s.id, name: Model.songLabel(s), sub: admin ? '' : team.songs.includes(s) ? 'Team song' : 'Common song' })),
+    id => catSongs(c, admin ? 'common' : 'team').includes(id),
+    id => { const l = catSongs(c, admin ? 'common' : 'team'); const k = l.indexOf(id); if (k >= 0) l.splice(k, 1); else l.push(id); });
+}
+// Songs screen: which categories a song is in (common ones on the Admin screen, the team's on Team setup)
+const songCats = s => library.categories.filter(c => catSongs(c, commonScope() ? 'common' : 'team').includes(s.id));
+function openSongCatPicker(s) {
+  const kind = commonScope() ? 'common' : 'team';
+  openToggleList(`Categories with ${s.title}`,
+    () => library.categories.map(c => ({ id: c.id, name: c.name, sub: '' })),
+    id => catSongs(findCat(id), kind).includes(s.id),
+    id => { const l = catSongs(findCat(id), kind); const k = l.indexOf(s.id); if (k >= 0) l.splice(k, 1); else l.push(s.id); });
 }
 
-/* A list of every song with on/off toggles, for putting songs in a moment (or a song in moments). */
 function openToggleList(title, items, isOn, toggle) {
   const html = () => items().map(it => `<button class="item" data-tog="${esc(it.id)}" aria-pressed="${isOn(it.id)}">
       <span class="tick" aria-hidden="true">${isOn(it.id) ? '✓' : ''}</span>
@@ -1095,19 +1062,6 @@ function openToggleList(title, items, isOn, toggle) {
   };
 }
 
-function openMomentSongPicker(m) {
-  openToggleList(`Songs in ${m.name}`,
-    () => [...(commonScope() ? library.songs : pool().songs)].sort((a, b) => a.title.localeCompare(b.title)).map(s => ({ id: s.id, name: Model.songLabel(s), sub: s.stop != null ? clipText(s) : '' })),
-    id => m.songIds.includes(id),
-    id => { m.songIds = m.songIds.includes(id) ? m.songIds.filter(x => x !== id) : [...m.songIds, id]; });
-}
-
-function openSongMomentPicker(s) {
-  openToggleList(`Moments with ${s.title}`,
-    () => momentsHere().map(m => ({ id: m.id, name: m.name, sub: m.section === 'breaks' ? 'Warmups & breaks' : 'Key moments' })),
-    id => findHere(id).songIds.includes(s.id),
-    id => { const m = findHere(id); m.songIds = m.songIds.includes(s.id) ? m.songIds.filter(x => x !== s.id) : [...m.songIds, s.id]; });
-}
 
 /* ==================================================================== 11. LOCK */
 
@@ -1161,7 +1115,7 @@ function openTeams() {
       ${t.id !== team.id && !settings.locked ? `<button class="btn small danger" data-remove-team="${esc(t.id)}">Remove</button>` : ''}</div>`;
   }).join('');
   openDialog('Teams on this device', `
-    <p class="hint">Tap a team to use it. Each team keeps its own roster, lineups, moments and game.</p>
+    <p class="hint">Tap a team to use it. Each team keeps its own roster, lineups, music and game.</p>
     <div class="list">${list}</div>
     ${settings.locked ? '' : `<div class="row"><button class="btn outline" id="teamNew">+ New team</button>
       <button class="btn" id="teamDrive">Get teams from Google Drive</button></div>
@@ -1213,11 +1167,11 @@ function paintDrive() {
         <span>${esc(r.data.name)}<br><small class="hint">${status}</small></span></label>`;
     }).join('') || '<p class="hint">There are no teams in the Drive folder yet. The organizer publishes one from their device.</p>';
     const commonKeep = realRole() === 'admin' && Drive.commonEdits() ? `<div class="warn">
-        <b>The common library was changed on this device</b> and those changes aren’t published. Updating replaces this device’s common songs and moments with Drive’s.
-        <label class="check"><input type="checkbox" data-keep="common" ${dui.keep.common ? 'checked' : ''}>Keep this device’s common songs and moments</label></div>` : '';
+        <b>The common library was changed on this device</b> and those changes aren’t published. Updating replaces this device’s common songs and music categories with Drive’s.
+        <label class="check"><input type="checkbox" data-keep="common" ${dui.keep.common ? 'checked' : ''}>Keep this device’s common songs and music categories</label></div>` : '';
     const keeps = commonKeep + p.teams.filter(t => t.localEdits).map(t => `<div class="warn">
-        <b>${esc(t.name)} was changed on this device</b> since it last came from Drive. Updating replaces its roster, team songs and moments with Drive’s. Lineups changed here are always kept.
-        <label class="check"><input type="checkbox" data-keep="${esc(t.id)}" ${dui.keep[t.id] ? 'checked' : ''}>Keep this device’s roster, team songs and moments for ${esc(t.name)}</label></div>`).join('');
+        <b>${esc(t.name)} was changed on this device</b> since it last came from Drive. Updating replaces its roster, team songs and music with Drive’s. Lineups changed here are always kept.
+        <label class="check"><input type="checkbox" data-keep="${esc(t.id)}" ${dui.keep[t.id] ? 'checked' : ''}>Keep this device’s roster, team songs and music for ${esc(t.name)}</label></div>`).join('');
     const summary = !dui.chosen.length ? 'Pick at least one team.'
       : p.items.length ? `${p.items.length} song${p.items.length === 1 ? '' : 's'} and announcement${p.items.length === 1 ? '' : 's'} to download (${mb(p.bytes)}).`
       : 'All the songs are already on this device.';
@@ -1237,11 +1191,11 @@ function paintDrive() {
   }
   // idle
   if (!Auth.enabled()) {
-    box.innerHTML = `<p class="hint">Google sign-in isn’t set up on this copy yet. Once the organizer adds the sign-in client ID, this is where you get the team’s newest roster, lineups, moments and songs.</p>${conn}`;
+    box.innerHTML = `<p class="hint">Google sign-in isn’t set up on this copy yet. Once the organizer adds the sign-in client ID, this is where you get the team’s newest roster, lineups, music and songs.</p>${conn}`;
   } else if (!Auth.canRedirect()) {
     box.innerHTML = `<p class="hint">Open Diamond DJ from its web address (or the home-screen icon) to use Google Drive.</p>${conn}`;
   } else {
-    box.innerHTML = `<p class="hint">Gets the newest roster, lineups, moments and songs from the team’s Google Drive folder and keeps them on this device, so games don’t need wifi. Sign in with the Google account the organizer shared the folder with.</p>
+    box.innerHTML = `<p class="hint">Gets the newest roster, lineups, music and songs from the team’s Google Drive folder and keeps them on this device, so games don’t need wifi. Sign in with the Google account the organizer shared the folder with.</p>
       <div class="row"><button class="btn primary" id="drvCheck">${Drive.state.lastCheck ? 'Check for updates' : 'Download from Google Drive'}</button>
         <button class="btn" id="drvSwitch">Switch Google account</button></div>
       ${dui.note ? `<p class="hint">${esc(dui.note)}</p>` : ''}
@@ -1359,8 +1313,8 @@ function render() {
   renderNav();
   $('#teamName').textContent = team.short || team.name || 'Diamond DJ';
   if (!['songs', 'csongs'].includes(ui.view)) { Sound.stopPreview(); edit.songId = null; }
-  ({ game: renderGame, lineup: renderLineup, roster: renderRoster, songs: renderSongs, moments: renderMoments, teaminfo: renderTeamInfo,
-    publish: () => renderPublish('team'), csongs: renderSongs, cmoments: renderMoments, cpublish: () => renderPublish('common') })[ui.view]();
+  ({ game: renderGame, lineup: renderLineup, roster: renderRoster, songs: renderSongs, music: renderMusicSetup, teaminfo: renderTeamInfo,
+    publish: () => renderPublish('team'), csongs: renderSongs, cmusic: renderMusicSetup, cpublish: () => renderPublish('common') })[ui.view]();
 }
 
 /* The header: Game and Lineup for everyone; Team (team organizers) and Admin (Diamond DJ Admin)
@@ -1373,15 +1327,15 @@ function renderNav() {
   document.body.classList.toggle('ws-admin', ws === 'admin');
   document.body.classList.toggle('ws-lineup', ui.view === 'lineup');
   const tab = (v, label, badge) => `<button data-view="${v}"${ui.view === v ? ' aria-current="page"' : ''}>${label}${badge ? '<span class="tab-dot" aria-label="not published"></span>' : ''}</button>`;
-  const teamDirty = Drive.localEdits(team) !== false && (team.players.length || team.songs.length || team.moments.length);
+  const teamDirty = Drive.localEdits(team) !== false && (team.players.length || team.songs.length || Object.keys(team.music).length);
   const commonDirty = !!Drive.commonEdits() || (Drive.commonEdits() === null && library.songs.length > 0);
   let html;
   if (ws === 'team') html = `<button class="ws-back" data-view="game"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>Game</button>
     <div class="tab-group"><span class="group-label in-game">Team · ${esc(team.short || team.name)}</span><div class="group game ws-tabs">
-      ${tab('roster', 'Roster<span class="wide-only">&nbsp;&amp; walk-ups</span>')}${tab('songs', 'Team songs')}${tab('moments', 'Moments')}${tab('teaminfo', 'Team info')}${tab('publish', 'Publish', teamDirty)}</div></div>`;
+      ${tab('roster', 'Roster<span class="wide-only">&nbsp;&amp; walk-ups</span>')}${tab('songs', 'Team songs')}${tab('music', 'Music')}${tab('teaminfo', 'Team info')}${tab('publish', 'Publish', teamDirty)}</div></div>`;
   else if (ws === 'admin') html = `<button class="ws-back" data-view="game"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>Game</button>
     <div class="tab-group"><span class="group-label in-game">Diamond DJ Admin · all teams</span><div class="group game ws-tabs">
-      ${tab('csongs', 'Common songs')}${tab('cmoments', 'Common moments')}${tab('cpublish', 'Publish', commonDirty)}</div></div>`;
+      ${tab('csongs', 'Common songs')}${tab('cmusic', 'Music categories')}${tab('cpublish', 'Publish', commonDirty)}</div></div>`;
   else if (ui.view === 'lineup') html = `<button class="ws-back" data-view="game"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>Game</button>
     <span class="ws-title">Lineups</span>`;
   // the Game screen: nothing here. Lineups, Team and Admin are in Settings › Manage
@@ -1415,8 +1369,8 @@ function renderPublish(kind) {
   const common = kind === 'common';
   main.innerHTML = `<div class="stack publish-page">
     <span class="section-title">${common ? 'Publish the common library' : `Publish ${esc(team.name)}`}</span>
-    <p class="hint">${common ? 'Sends the common songs and common moments on this device to Google Drive. Every team gets them at its next Check for updates.'
-      : `Sends ${esc(team.short || team.name)}’s roster, walk-ups, team songs, moments and lineups on this device to the team’s Google Drive folder. Everyone on the team gets them at their next Check for updates; lineups a volunteer changed on game day stay theirs.`}
+    <p class="hint">${common ? 'Sends the common songs and music categories on this device to Google Drive. Every team gets them at its next Check for updates.'
+      : `Sends ${esc(team.short || team.name)}’s roster, walk-ups, team songs, music and lineups on this device to the team’s Google Drive folder. Everyone on the team gets them at their next Check for updates; lineups a volunteer changed on game day stay theirs.`}
       Nothing in Drive is deleted, and Drive keeps earlier versions.</p>
     <div class="panel stack" id="pubBox"></div></div>`;
   paintPublish();
@@ -1433,7 +1387,7 @@ function paintPublish() {
     const p = pui.plan;
     const n = p.uploads.length;
     box.innerHTML = `<b>${common ? 'The common library' : esc(team.name)}</b>
-      <p>Sends ${common ? `${library.songs.length} common song${library.songs.length === 1 ? '' : 's'} and ${library.moments.length} common moments` : `the roster, ${team.songs.length} team song${team.songs.length === 1 ? '' : 's'}, ${team.moments.length} team moment${team.moments.length === 1 ? '' : 's'} and ${team.lineups.length} lineup${team.lineups.length === 1 ? '' : 's'}`}${n ? `, with ${n} file${n === 1 ? '' : 's'} Drive doesn’t have yet (${mb(p.bytes)})` : ''}.
+      <p>Sends ${common ? `${library.songs.length} common song${library.songs.length === 1 ? '' : 's'} and ${library.categories.length} music categories` : `the roster, ${team.songs.length} team song${team.songs.length === 1 ? '' : 's'} and ${team.lineups.length} lineup${team.lineups.length === 1 ? '' : 's'}`}${n ? `, with ${n} file${n === 1 ? '' : 's'} Drive doesn’t have yet (${mb(p.bytes)})` : ''}.
         ${p.firstTime && !common ? `A new folder, <b>${esc(p.folderName)}</b>, is made for the team.` : ''}</p>
       ${p.since ? `<div class="warn"><b>Someone published ${common ? 'the common library' : 'this team'} after this device last got it.</b> Get the latest first, so your publish doesn’t undo their changes.
         <div class="row"><button class="btn navy" id="pubLatest">Get latest first</button></div></div>` : ''}
@@ -1517,63 +1471,41 @@ async function onAction(e) {
     case 'edit-order': return openOrderDialog();
     case 'new-game': if (!armed(b, 'Tap again: new game')) return; newGame(); return render();
     case 'game-tab': ui.gameTab = b.dataset.tab; return render();
-    case 'moment': return playMoment(gameMoments().find(m => m.id === id));
-    /* moments screen */
-    case 'pick-moment': ui.momentId = id; ui.phoneDetail = true; main.scrollTop = 0; return render();
-    case 'm-new': {
-      const name = await askText('New moment or playlist', 'Button name', '', 'Create');
-      if (!name) return;
-      const m = Model.newMoment({ name });
-      momentsHere().push(m); ui.momentId = m.id; ui.phoneDetail = true; saveBoth(); return render();
+    /* music */
+    case 'cat': ui.catId = id; return renderGame();
+    case 'music': return tapMusic(id);
+    case 'shuffle': return tapShuffle(id);
+    case 'pick-cat': ui.catId = id; ui.phoneDetail = true; main.scrollTop = 0; return render();
+    case 'cat-new': {
+      const c = Model.newCategory({ color: Model.CAT_COLORS[library.categories.length % Model.CAT_COLORS.length] });
+      library.categories.push(c); ui.catId = c.id; ui.phoneDetail = true; saveLibrary(); render();
+      const f = $('[data-cf="name"]'); if (f) { f.focus(); f.select(); } return;
     }
-    case 'm-color': case 'm-section': case 'm-mode': {
-      const m = findHere(ui.momentId);
-      m[{ 'm-color': 'color', 'm-section': 'section', 'm-mode': 'mode' }[act]] = b.dataset.v;
-      if (act === 'm-section') { setMomentsHere(momentsHere().filter(x => x !== m).concat(m)); } // goes to the end of its new section
+    case 'cat-color': findCat(ui.catId).color = b.dataset.color; saveLibrary(); return render();
+    case 'cat-move': {
+      const l = library.categories, i = l.indexOf(findCat(ui.catId)), j = i + Number(b.dataset.dir);
+      if (j < 0 || j >= l.length) return;
+      [l[i], l[j]] = [l[j], l[i]]; saveLibrary(); return render();
+    }
+    case 'cat-delete': {
+      if (!armed(b, 'Tap again to delete')) return;
+      library.categories = library.categories.filter(c => c.id !== ui.catId);
+      ui.catId = null; ui.phoneDetail = false; saveLibrary(); return render();
+    }
+    case 'cs-add': return openCatSongPicker(findCat(ui.catId));
+    case 'cs-remove': case 'cs-up': case 'cs-down': {
+      const l = catSongs(findCat(ui.catId), b.dataset.list), i = l.indexOf(id);
+      if (act === 'cs-remove') l.splice(i, 1);
+      else { const j = i + (act === 'cs-up' ? -1 : 1); if (j < 0 || j >= l.length) return; [l[i], l[j]] = [l[j], l[i]]; }
       saveBoth(); return render();
     }
-    case 'm-move': {
-      const m = findHere(ui.momentId);
-      const same = momentsHere().filter(x => x.section === m.section);
-      const other = same[same.indexOf(m) + Number(b.dataset.d)];
-      if (!other) return;
-      const i = momentsHere().indexOf(m), j = momentsHere().indexOf(other);
-      const ms = momentsHere(); [ms[i], ms[j]] = [ms[j], ms[i]];
-      saveBoth(); return render();
-    }
-    case 'm-delete': {
-      if (!armed(b, 'Tap again to delete this moment')) return;
-      setMomentsHere(momentsHere().filter(x => x.id !== ui.momentId));
-      ui.momentId = null; saveBoth(); return render();
-    }
-    case 'cm-show': { const mid = ui.momentId; team.hidden = b.checked ? team.hidden.filter(x => x !== mid) : [...team.hidden, mid]; saveTeam(); return render(); }
-    case 'cm-remove': { team.extra[ui.momentId] = (team.extra[ui.momentId] || []).filter(x => x !== id); saveTeam(); return render(); }
-    case 'cm-add': {
-      const mid = ui.momentId, cmn = library.moments.find(x => x.id === mid);
-      return openToggleList(`${team.short || team.name} songs in ${cmn.name}`,
-        () => [...team.songs, ...library.songs.filter(x => !cmn.songIds.includes(x.id))].map(x => ({ id: x.id, name: Model.songLabel(x), sub: team.songs.includes(x) ? 'Team song' : 'Common song' })),
-        x => (team.extra[mid] || []).includes(x),
-        x => { const l = team.extra[mid] || []; team.extra[mid] = l.includes(x) ? l.filter(y => y !== x) : [...l, x]; });
-    }
-    case 'm-add-songs': return openMomentSongPicker(findHere(ui.momentId));
-    case 'm-song-remove': case 'm-song-up': case 'm-song-down': {
-      const m = findHere(ui.momentId);
-      const i = m.songIds.indexOf(id);
-      if (act === 'm-song-remove') m.songIds.splice(i, 1);
-      else {
-        const j = i + (act === 'm-song-up' ? -1 : 1);
-        if (j < 0 || j >= m.songIds.length) return;
-        [m.songIds[i], m.songIds[j]] = [m.songIds[j], m.songIds[i]];
-      }
-      saveBoth(); return render();
-    }
-    case 'm-listen': {
+    case 'listen': {
       const x = song(id), c = Model.clipOf(x);
       return Sound.playOne({ path: c.path, start: c.start, stop: c.stop, fadeOut: c.fadeOut, level: c.volume, label: `Listen · ${x.title}`, kind: 'sound' })
         .catch(() => toast('That song’s file isn’t on this device.'));
     }
-    case 'sm-add': return openSongMomentPicker(s);
-    case 'sm-remove': { const m = findHere(id); m.songIds = m.songIds.filter(x => x !== s.id); saveBoth(); return render(); }
+    case 'sc-add': return openSongCatPicker(s);
+    case 'sc-remove': { const l = catSongs(findCat(id), commonScope() ? 'common' : 'team'); l.splice(l.indexOf(s.id), 1); saveBoth(); return render(); }
     case 'go': return go(b.dataset.view);
     case 'load-demo': return loadDemo();
     /* lineups */
@@ -1710,18 +1642,18 @@ main.addEventListener('input', e => {
     const item = document.querySelector(`#songList [data-id="${CSS.escape(s.id)}"] .name`);
     if (item) item.textContent = Model.songLabel(s);
   }
-  if (t.dataset.mf === 'name') {
-    const m = findHere(ui.momentId); m.name = t.value; saveBoth();
-    const item = document.querySelector(`[data-act="pick-moment"][data-id="${CSS.escape(m.id)}"] .name`);
-    if (item) item.textContent = m.name;
+  if (t.dataset.cf === 'name') {
+    const c = findCat(ui.catId); c.name = t.value; saveLibrary();
+    const item = document.querySelector(`[data-act="pick-cat"][data-id="${CSS.escape(c.id)}"] .name`);
+    if (item) item.textContent = c.name;
   }
 });
 
 main.addEventListener('change', async e => {
   const t = e.target;
   if (t.id === 'luSelect') { ui.lineupId = t.value; return render(); }
+  if (t.dataset.act === 'cat-show') { const cid = ui.catId; team.hiddenCats = t.checked ? team.hiddenCats.filter(x => x !== cid) : [...team.hiddenCats, cid]; saveTeam(); return render(); }
   if (t.id === 'gameLineup') { game.lineupId = t.value; game.upNext = null; saveGame(); return render(); }
-  if (t.dataset.mf === 'skipPlayed') { findHere(ui.momentId).skipPlayed = t.checked; saveBoth(); return; }
   if (t.dataset.pf === 'active') {
     const p = player(ui.playerId); p.active = t.checked; Model.syncLineups(team); saveTeam(); return render();
   }
@@ -1893,7 +1825,7 @@ function openHelp(section) {
       <li>On <b>Game</b>, check the lineup at the top and tap <b>New game</b> (twice) so every song can play again.</li>
       <li>When a batter walks up, tap <b>Play walkup</b>: the announcement, then their song. The order moves to the next batter by itself. <b>Skip</b> passes over someone.</li>
       <li>Batter not in order? Tap anyone in the list to play them. Press and hold a name to make them up next.</li>
-      <li>Key moments (Home Run, Strikeout…) and breaks (Pitcher Warmup, Between Innings…): tap to play, tap again to fade out.</li>
+      <li><b>Music</b> (Warm-up, Pitchers, Crowd favourites…): tap a category, then a song to play it; tap it again to fade out. <b>Shuffle</b> picks one not played yet this game.</li>
       <li><b>Fade out</b> when play starts. <b>Stop</b> cuts everything at once.</li>
       <li>Tap <b>Lock</b> so nobody changes the setup by accident. Game and Lineup stay open. Press and hold the lock for 1.5 seconds to unlock.</li>
     </ol>
@@ -1903,17 +1835,17 @@ function openHelp(section) {
     ${q('A batter says “No announcement”.', `<p>Their song still plays, with no announcement first. The clip is added in <b>Roster</b> (tap the player, then <b>Choose a clip</b>), or comes with <b>Check for updates</b> once the organizer publishes it.</p>`)}
     ${q('The batting order changed (someone is late, sick or leaving early).', `<p>On <b>Game</b>, tap <b>Edit order</b>: drag a batter to move them, or tap <b>Bench</b> to take them out (and <b>Add back</b> when they arrive). It saves as you go. Saved lineups for other games are in <b>Settings › Lineups</b>.</p>`)}
     ${q('The wrong song or player played.', `<p>Tap <b>Fade out</b>, then tap the right batter in the list. To put the order back where it should be, press and hold the batter who should be up next.</p>`)}
-    ${q('A key moment button does nothing.', `<p>It has no songs yet. Add songs to it on the <b>Moments</b> screen (unlock first). A tap on a playing button fades it out.</p>`)}
-    ${q('Roster, Songs, Moments and Settings are gone.', `<p>The app is locked. Press and hold the lock button at the top for a second and a half.</p>`)}
+    ${q('A music category is empty.', `<p>It has no songs yet. A team organizer adds them in <b>Settings › Team setup › Music</b>; the Diamond DJ Admin adds common ones in <b>Settings › Admin › Music categories</b>.</p>`)}
+    ${q('Settings is gone.', `<p>The app is locked. Press and hold the lock button at the top for a second and a half.</p>`)}
     ${q('The screen turns off during the game.', `<p>Diamond DJ keeps the screen on while it's open where the device allows. If it still turns off: <b>Android:</b> Settings › Display › Screen timeout › the longest time. <b>iPad / iPhone:</b> Settings › Display &amp; Brightness › Auto-Lock › Never.</p>`)}
     ${q('How do I put it on the home screen?', `<p><b>Settings › This device › Install Diamond DJ</b>. If your device can't do it in one tap, it shows you the steps. Then always open it from the Bees icon.</p>`)}
     ${q('It says “A new version of Diamond DJ is ready”.', `<p>Tap <b>Update now</b> when nothing is playing. Your teams, lineups and songs stay. <b>Later</b> keeps this version until the app is opened again. Small fixes install by themselves; the screen may blink for a second.</p>`)}
     ${q('The wrong team is showing.', `<p>Tap the team name at the top left and pick your team. Missing? Tap <b>Settings › Check for updates</b> and tick it.</p>`)}
-    ${q('Will Check for updates undo my lineup?', `<p>No. A lineup changed on this device is kept. Roster and moment changes made on this device are flagged first, so you can choose to keep them.</p>`)}
+    ${q('Will Check for updates undo my lineup?', `<p>No. A lineup changed on this device is kept. Roster and music changes made on this device are flagged first, so you can choose to keep them.</p>`)}
 
     <div ${Drive.state.editor ? '' : 'hidden'}>
     <h3>For organizers</h3>
-    ${q('How do I send changes to every device?', `<p><b>Settings › Team setup › Publish</b> (and, for the common songs and moments, <b>Settings › Admin › Publish</b>). It lists what will be sent (new songs, announcement clips, the team file) before anything goes. Volunteers get it the next time they tap <b>Check for updates</b>. Nothing in Drive is deleted, and Drive keeps earlier versions.</p>`)}
+    ${q('How do I send changes to every device?', `<p><b>Settings › Team setup › Publish</b> (and, for the common songs and music categories, <b>Settings › Admin › Publish</b>). It lists what will be sent (new songs, announcement clips, the team file) before anything goes. Volunteers get it the next time they tap <b>Check for updates</b>. Nothing in Drive is deleted, and Drive keeps earlier versions.</p>`)}
     ${q('How do I add a volunteer?', `<p>Share the <b>Diamond DJ</b> Google Drive folder with their Google account as <b>Viewer</b> (or <b>Editor</b> for someone who will publish). While the app is in testing, also add them in Google Cloud (Diamond DJ project › Google Auth Platform › Audience › <b>Test users</b>).</p>`)}
     ${q('How do I add a song or set where it starts?', `<p><b>Songs › Add songs</b> and pick MP3s. Tap a song, play it, then <b>Set start here</b> at the catchy part and <b>Set stop here</b> where it should end. Link it to a player in <b>Roster</b>, then publish.</p>`)}
     </div>

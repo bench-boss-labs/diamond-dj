@@ -6,49 +6,45 @@ screen, and plays everything from the device, so no wifi is needed at the field.
 
 First team: U13 Burlington Bees. Design spec and mockups live in the claude.ai project "Diamond DJ".
 
-## Roles (version 0.6)
+## Roles (version 0.6, screens from 0.7)
 
-| Role | Google Drive sharing | Sees |
+| Role | Google Drive sharing | Sees in Settings › Manage |
 | --- | --- | --- |
-| Diamond DJ Admin | Editor on the Diamond DJ folder | Game, Lineup, **Team** (any team), **Admin** |
-| Team organizer | Editor on their team's folder | Game, Lineup, **Team** |
-| Volunteer | Viewer on their team's folder and the Diamond DJ folder | Game, Lineup |
+| Diamond DJ Admin | Editor on the Diamond DJ folder | Lineups, **Team setup** (any team), **Admin** |
+| Team organizer | Editor on their team's folder | Lineups, **Team setup** |
+| Volunteer | Viewer on their team's folder and the Diamond DJ folder | Lineups |
 
 Roles are read at Check for updates. A device that has never checked Drive can set everything up.
-The Admin can try the other roles with Settings › Your role › View as.
+The Admin can try the other roles with Settings › Advanced › View as.
 
-- **Team screen:** Roster & walk-ups, Team songs, Moments (common ones: show/hide, add team songs; plus
-  team moments), Team info, Publish (the team file, team songs, announcements).
-- **Admin screen:** Common songs, Common moments, Publish (the common library).
+- **Team setup:** Roster & walk-ups, Team songs, Music (add team songs to a category, hide one),
+  Team info, Publish (the team file, team songs, announcements).
+- **Admin:** Common songs, Music categories (name, colour, order, common songs), Publish (the common library).
 
-## What it does (version 0.5)
+## What it does (version 0.8)
 
-- **Game**: big "Up next" card with **Play walkup** (announcement, then the song) and **Skip**;
-  the batting order auto-advances and wraps. Tap any batter to play them; press and hold to make
-  them up next. **Edit order** changes the lineup without leaving the game.
-- **Lineup**: saved lineups (new, duplicate, rename, delete, use for the game); drag or arrows to
+- **Game** (the only main screen): team, Lock, Help and Settings at the top. Big "Up next" card with
+  **Play walkup** (announcement, then the song) and **Skip**; the batting order auto-advances and
+  wraps. Tap any batter to play them; press and hold to make them up next. Pick the lineup and
+  **Edit order** above the batting order; **New game** (tap twice) goes back to batter 1.
+- **Music** on the Game screen (phones: the Music tab): colour-coded categories (Warm-up, Pitchers,
+  Crowd favourites, Post-game celebrations to start). Each shows **Shuffle** (a song not played yet
+  this game) and a button per song: tap to play, tap again to fade. Played songs are dimmed. Clips
+  under 5 s play over the music. A category's common songs come first, then the team's own.
+- **Settings**: Manage (Lineups, Team setup, Admin by role), then Updates, Sound, This device and
+  Advanced (View as, backup file).
+- **Lineups**: saved lineups (new, duplicate, rename, delete, use for the game); drag or arrows to
   reorder; Bench and Add back.
 - **Roster**: players (first, last, number, active), an announcement clip and a walk-up song each,
   song comes in under or after the announcement, **Test walkup**, readiness at a glance.
 - **Songs**: add MP3s from the device, waveform with start and stop points, Play / Set start here /
-  Set stop here / Hear the clip, exact seconds, fade and volume.
-- **Settings** (gear): fade length, walk-up length, song volume under the announcement, New game,
-  backup file (roster, lineups, cut points; not the music), demo team.
-- **Key moments and breaks** on the Game screen: tap to play, tap again to fade. Each plays a random
-  song (skipping ones already played this game), the next song in order, or a playlist that keeps
-  going with overlapping songs (a second tap skips). Clips under 5 s, like a foul-ball horn, play
-  over the music. New teams start with Home Run, Strikeout, Great Play, Walk, Rally Time, Double
-  Play, Foul Ball, We Win!, Pitcher Warmup, Between Innings, Pregame and O Canada, all empty.
-- **Moments** screen: create, rename, recolour, reorder and delete moments; pick songs from the
-  library and their order. Songs can also be added to moments from the Songs screen.
-- **Lock**: hides Roster, Songs, Moments and Settings; Game and Lineup stay open. Press and hold
-  1.5 s to unlock.
-- **New game** (tap twice): back to batter 1, and every song can play again.
-- Phones: the Game screen splits into Walkups, Moments and Breaks tabs and shows the next 3 batters;
-  Roster, Songs and Moments open one item at a time; dialogs open full screen; a one-row now-playing
-  bar. Tablets keep the side-by-side layouts.
+  Set stop here / Hear the clip, exact seconds, fade and volume; add a song to music categories.
+- **Lock**: hides Settings (and so all setup). The Game screen, Edit order and Help stay open.
+  Press and hold 1.5 s to unlock.
+- Phones: the Game screen has Walk-ups and Music tabs and shows the next 3 batters; setup lists open
+  one item at a time; dialogs open full screen. Tablets show walk-ups and Music side by side.
 - **Several teams**: the team button at the top left switches teams, makes a new one or removes one
-  from the device. Each team keeps its own roster, lineups, moments and game; songs are shared.
+  from the device. Each team keeps its own roster, lineups, music and game; common songs are shared.
 - **Google Drive** (Settings): volunteers sign in with Google and tap **Check for updates** to get
   the teams they run, downloading only new or changed songs. Organizers (Editor access) get
   **Publish to Drive**. Lineups changed on a device are never overwritten by an update.
@@ -68,10 +64,10 @@ The Admin can try the other roles with Settings › Your role › View as.
 
 ```
 Diamond DJ/                      (shared person by person; see Roles)
-├── library.diamond.json         the common library: common songs (titles, cut points) and common moments
+├── library.diamond.json         the common library: common songs (titles, cut points) and music categories
 ├── Common Songs/…mp3            the common songs' files
 └── U13 Bees/                    one folder per team (made by the first Publish)
-    ├── U13-Bees.diamond.json    roster, walk-ups, team songs, team moments, lineups
+    ├── U13-Bees.diamond.json    roster, walk-ups, team songs, the team's music, lineups
     ├── Team Songs/…mp3          songs only this team uses (pitcher music, favourites)
     └── Announcements/…mp3       one clip per player
 ```

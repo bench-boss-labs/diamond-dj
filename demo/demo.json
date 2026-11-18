@@ -1,7 +1,7 @@
 {
  "team": {
   "format": "diamond-team",
-  "version": 3,
+  "version": 4,
   "id": "demo_team",
   "name": "U13 Burlington Bees (demo)",
   "short": "U13 Bees",
@@ -131,23 +131,6 @@
     "entry": "under"
    }
   ],
-  "moments": [
-   {
-    "id": "demo_m9",
-    "name": "Pitcher Warmup",
-    "color": "light",
-    "section": "breaks",
-    "mode": "playlist",
-    "skipPlayed": true,
-    "songIds": [
-     "demo_s1",
-     "demo_s2",
-     "demo_s3",
-     "demo_s4",
-     "demo_s5"
-    ]
-   }
-  ],
   "lineups": [
    {
     "id": "demo_l1",
@@ -189,12 +172,16 @@
    }
   ],
   "songs": [],
-  "hidden": [],
-  "extra": {}
+  "music": {
+   "c_pitchers": [
+    "demo_s4"
+   ]
+  },
+  "hiddenCats": []
  },
  "library": {
   "format": "diamond-library",
-  "version": 2,
+  "version": 3,
   "songs": [
    {
     "id": "demo_s1",
@@ -269,123 +256,40 @@
     "categories": []
    }
   ],
-  "moments": [
+  "categories": [
    {
-    "id": "demo_m1",
-    "name": "Home Run",
-    "color": "navy",
-    "section": "moments",
-    "mode": "random",
-    "skipPlayed": true,
+    "id": "c_warmup",
+    "name": "Warm-up",
+    "color": "#1E56B8",
     "songIds": [
      "demo_s1",
      "demo_s2"
     ]
    },
    {
-    "id": "demo_m2",
-    "name": "Strikeout",
-    "color": "blue",
-    "section": "moments",
-    "mode": "random",
-    "skipPlayed": true,
+    "id": "c_pitchers",
+    "name": "Pitchers",
+    "color": "#0B2447",
     "songIds": [
      "demo_s3"
     ]
    },
    {
-    "id": "demo_m3",
-    "name": "Great Play",
-    "color": "blue",
-    "section": "moments",
-    "mode": "random",
-    "skipPlayed": true,
+    "id": "c_crowd",
+    "name": "Crowd favourites",
+    "color": "#F5B700",
     "songIds": [
      "demo_s4",
      "demo_s5"
     ]
    },
    {
-    "id": "demo_m4",
-    "name": "Walk",
-    "color": "light",
-    "section": "moments",
-    "mode": "random",
-    "skipPlayed": true,
-    "songIds": []
-   },
-   {
-    "id": "demo_m5",
-    "name": "Rally Time",
-    "color": "gold",
-    "section": "moments",
-    "mode": "order",
-    "skipPlayed": true,
-    "songIds": [
-     "demo_s2",
-     "demo_s3"
-    ]
-   },
-   {
-    "id": "demo_m6",
-    "name": "Double Play",
-    "color": "blue",
-    "section": "moments",
-    "mode": "random",
-    "skipPlayed": true,
-    "songIds": []
-   },
-   {
-    "id": "demo_m7",
-    "name": "Foul Ball",
-    "color": "light",
-    "section": "moments",
-    "mode": "random",
-    "skipPlayed": false,
+    "id": "c_postgame",
+    "name": "Post-game celebrations",
+    "color": "#2E7D46",
     "songIds": [
      "demo_s6"
     ]
-   },
-   {
-    "id": "demo_m8",
-    "name": "We Win!",
-    "color": "navy",
-    "section": "moments",
-    "mode": "random",
-    "skipPlayed": true,
-    "songIds": [
-     "demo_s5"
-    ]
-   },
-   {
-    "id": "demo_m10",
-    "name": "Between Innings",
-    "color": "light",
-    "section": "breaks",
-    "mode": "playlist",
-    "skipPlayed": true,
-    "songIds": [
-     "demo_s3",
-     "demo_s4"
-    ]
-   },
-   {
-    "id": "demo_m11",
-    "name": "Pregame",
-    "color": "light",
-    "section": "breaks",
-    "mode": "playlist",
-    "skipPlayed": true,
-    "songIds": []
-   },
-   {
-    "id": "demo_m12",
-    "name": "O Canada",
-    "color": "light",
-    "section": "breaks",
-    "mode": "order",
-    "skipPlayed": false,
-    "songIds": []
    }
   ]
  },

@@ -90,7 +90,7 @@ with sync_playwright() as p:
     vol.click('#drvGo')
     signin_and_wait(vol, '#driveBox:has-text("Up to date")')
     check('team is in use on the volunteer device', vol.evaluate("team.id") == 'demo_team' and vol.evaluate("team.players.length") == 10)
-    check('the common moments came too', vol.evaluate("library.moments.length") == 11 and vol.evaluate("gameMoments().length") == 12)
+    check('the music categories came too, with the team’s own song', vol.evaluate("library.categories.length") == 4 and vol.evaluate("gameCats()[1].songIds.join()") == 'demo_s3,demo_s4')
     check('the empty starter team made way', vol.evaluate("Object.keys(teams).length") == 1)
     check('all 14 files stored', vol.evaluate("['Songs/Test Song 1 - Diamond DJ.mp3','Announcements/demo-8.mp3'].every(p => stored.has(p)) && stored.size") == 14)
     vol.click('#dlgClose')
@@ -103,8 +103,8 @@ with sync_playwright() as p:
     vol.evaluate("Model.benchPlayer(lineup(), 'demo_p3'); lineup().updated = Date.now(); saveTeam()")
     time.sleep(0.5)
 
-    # ------------------------------------------------------------ the Admin changes the roster and a common moment, publishes both
-    org.evaluate("team.players.find(p => p.id === 'demo_p1').first = 'Liv'; library.moments[0].name = 'Homer'; saveTeam(); saveLibrary()")
+    # ------------------------------------------------------------ the Admin changes the roster and a music category, publishes both
+    org.evaluate("team.players.find(p => p.id === 'demo_p1').first = 'Liv'; library.categories[0].name = 'Homer'; saveTeam(); saveLibrary()")
     time.sleep(0.4)
     text = publish(org, 'publish')
     check('second team publish sends no files again', 'Drive doesn' not in text)
@@ -119,7 +119,7 @@ with sync_playwright() as p:
     check('update needs no downloads', 'already on this device' in vol.inner_text('#driveBox'))
     vol.click('#drvGo')
     signin_and_wait(vol, '#driveBox:has-text("Up to date")')
-    check('roster and common moments updated from Drive', vol.evaluate("player('demo_p1').first") == 'Liv' and vol.evaluate("library.moments[0].name") == 'Homer')
+    check('roster and music categories updated from Drive', vol.evaluate("player('demo_p1').first") == 'Liv' and vol.evaluate("library.categories[0].name") == 'Homer')
     check('the volunteer’s benched player stays benched', 'demo_p3' in vol.evaluate("lineup().bench"))
 
     # ------------------------------------------------------------ local roster edits are flagged before they're replaced
@@ -147,7 +147,7 @@ with sync_playwright() as p:
     coach.set_input_files('[data-act="songs-add"]', os.path.join(ROOT, 'demo', 'test-song-1.mp3') if os.path.exists(os.path.join(ROOT, 'demo', 'test-song-1.mp3')) else [f for f in [os.path.join(ROOT, 'demo', x) for x in sorted(os.listdir(os.path.join(ROOT, 'demo')))] if f.endswith('.mp3')][0])
     coach.wait_for_function("team.songs.length === 1", timeout=8000)
     check('the new song is a team song', coach.evaluate("team.songs[0].path.startsWith('Teams/demo_team/') && !library.songs.some(s => s.id === team.songs[0].id)"))
-    coach.evaluate("team.moments[0].songIds.push(team.songs[0].id); saveTeam()")
+    coach.evaluate("(team.music.c_pitchers = team.music.c_pitchers || []).push(team.songs[0].id); saveTeam()")
     time.sleep(0.4)
     text = publish(coach, 'publish')
     check('team organizer publishes the team with its team song', any(x.startswith('U13 Bees/Team Songs/') for x in tree()))

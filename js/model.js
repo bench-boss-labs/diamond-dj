@@ -1,12 +1,13 @@
 /* Diamond DJ: the data model and the rules that don't touch the screen or the speakers.
  * Pure functions only, so they run in the browser and in Node tests (tests/model.test.js).
  *
- * Two kinds of songs and moments (version 0.6):
+ * Two kinds of songs (version 0.8):
  *   the common library, run by the Diamond DJ Admin, for every team:
- *     library { format:'diamond-library', version:2, songs[] (common songs), moments[] (common moments) }
+ *     library { format:'diamond-library', version:3, songs[] (common songs), categories[] (music categories) }
+ *     category { id, name, color:'#rrggbb', songIds[] (common songs in it) }
  *   each team's own, run by its team organizers:
- *     team { format:'diamond-team', version:3, id, name, short, players[], lineups[],
- *            moments[] (team moments), songs[] (team songs), hidden:[common moment ids], extra:{ momentId: [songId] } }
+ *     team { format:'diamond-team', version:4, id, name, short, players[], lineups[],
+ *            songs[] (team songs), music:{ categoryId: [songId] } (songs the team adds), hiddenCats:[categoryId] }
  * player  { id, first, last, number, active, intro:{path}|null, songId|null, entry:'under'|'after' }
  * lineup  { id, name, order:[playerId], bench:[playerId], updated }
  * song    { id, path, title, artist, length, start, stop, fadeOut, volume, categories[] }
@@ -31,91 +32,68 @@
   /* ------------------------------------------------------------ teams and players */
 
   function newTeam(name, short) {
-    const team = { format: FORMAT_TEAM, version: 3, id: uid('t'), name, short: short || name, players: [], lineups: [], moments: [], songs: [], hidden: [], extra: {} };
+    const team = { format: FORMAT_TEAM, version: 4, id: uid('t'), name, short: short || name, players: [], lineups: [], songs: [], music: {}, hiddenCats: [] };
     team.lineups.push(newLineup('Default'));
     return team;
   }
 
-  /* ------------------------------------------------------------ key moments and breaks */
+  /* ------------------------------------------------------------ music categories (0.8)
+     The common library has the categories (Warm-up, Pitchers…) and their common songs; a team adds
+     its own songs to a category (team.music) and can hide a category it doesn't use. */
 
-  const COLORS = ['navy', 'blue', 'gold', 'light'];
+  const CAT_COLORS = ['#1E56B8', '#0B2447', '#F5B700', '#2E7D46', '#B42318', '#6B3FA0', '#E8702A', '#0E7C86'];
+  const hexOk = c => /^#[0-9a-f]{6}$/i.test(String(c || ''));
 
-  function newMoment(fields = {}) {
+  function newCategory(fields = {}) {
     return {
-      id: fields.id || uid('m'),
-      name: String(fields.name || 'New moment'),
-      color: COLORS.includes(fields.color) ? fields.color : 'blue',
-      section: fields.section === 'breaks' ? 'breaks' : 'moments',
-      mode: ['random', 'order', 'playlist'].includes(fields.mode) ? fields.mode : 'random',
-      skipPlayed: fields.skipPlayed !== false,
+      id: fields.id || uid('c'),
+      name: String(fields.name || 'New category'),
+      color: hexOk(fields.color) ? fields.color : CAT_COLORS[0],
       songIds: Array.isArray(fields.songIds) ? fields.songIds.map(String) : [],
     };
   }
 
-  // the moments from the mockups: made empty, the organizer adds songs
-  function defaultMoments() {
-    return [
-      ['Home Run', 'navy'], ['Strikeout', 'blue'], ['Great Play', 'blue'], ['Walk', 'light'],
-      ['Rally Time', 'gold', 'order'], ['Double Play', 'blue'], ['Foul Ball', 'light'], ['We Win!', 'navy'],
-    ].map(([name, color, mode]) => newMoment({ name, color, mode }))
-      .concat([
-        ['Pitcher Warmup', 'playlist'], ['Between Innings', 'playlist'], ['Pregame', 'playlist'], ['O Canada', 'order'],
-      ].map(([name, mode]) => newMoment({ name, mode, section: 'breaks', color: 'light', skipPlayed: mode !== 'order' })));
+  function defaultCategories() {
+    return [['c_warmup', 'Warm-up', '#1E56B8'], ['c_pitchers', 'Pitchers', '#0B2447'], ['c_crowd', 'Crowd favourites', '#F5B700'], ['c_postgame', 'Post-game celebrations', '#2E7D46']]
+      .map(([id, name, color]) => newCategory({ id, name, color }));
   }
-
-  function findMoment(team, id) { return team.moments.find(m => m.id === id) || null; }
 
   function removeSongEverywhere(team, songId) {
     for (const p of team.players) if (p.songId === songId) p.songId = null;
-    for (const m of team.moments) m.songIds = m.songIds.filter(id => id !== songId);
-    for (const k of Object.keys(team.extra || {})) team.extra[k] = team.extra[k].filter(id => id !== songId);
+    for (const k of Object.keys(team.music || {})) team.music[k] = team.music[k].filter(id => id !== songId);
   }
 
-  /* The moments a team's Game screen shows: the common ones it hasn't hidden (with the team's
-     own songs added to them), then the team's own. Copies, marked common:true or false. */
-  function gameMoments(library, team) {
-    const hidden = new Set(team.hidden || []);
-    const common = (library.moments || []).filter(m => !hidden.has(m.id))
-      .map(m => ({ ...m, songIds: [...m.songIds, ...((team.extra || {})[m.id] || [])], common: true }));
-    return common.concat(team.moments.map(m => ({ ...m, common: false })));
+  /* The categories a team's Game screen shows (not hidden), each with the common songs then the
+     team's own. Copies; common: how many of songIds are common songs. */
+  function gameMusic(library, team) {
+    const hidden = new Set(team.hiddenCats || []);
+    return (library.categories || []).filter(c => !hidden.has(c.id)).map(c => {
+      const mine = ((team.music || {})[c.id] || []).filter(id => !c.songIds.includes(id));
+      return { ...c, songIds: [...c.songIds, ...mine], common: c.songIds.length };
+    });
   }
 
   /* The songs a team can use: the common library's and its own. */
   function poolFor(library, team) { return { songs: (library.songs || []).concat((team && team.songs) || []) }; }
 
-  function momentsWithSong(team, songId) { return team.moments.filter(m => m.songIds.includes(songId)); }
-
-  /* Which song a tap on a moment plays.
-     state: { played: [songId], cursors: { momentId: index } } (kept on the device, cleared by New game)
-     rand: a function returning 0..1 (Math.random; tests pass their own)
-     Returns { songId, index } or null when the moment has no songs. */
-  function pickSong(moment, library, state, rand = Math.random) {
-    const ids = moment.songIds.filter(id => findSong(library, id));
+  /* Shuffle: a song from the category not played yet this game (all of them once each has played).
+     state: { played: [songId] } (kept on the device, cleared by New game). rand: 0..1 (tests pass their own). */
+  function pickShuffle(category, pool, state, rand = Math.random) {
+    const ids = category.songIds.filter(id => findSong(pool, id));
     if (!ids.length) return null;
-    if (moment.mode === 'random') {
-      const played = new Set(state.played || []);
-      let pool = moment.skipPlayed ? ids.filter(id => !played.has(id)) : ids;
-      if (!pool.length) pool = ids; // everything played: start over
-      const songId = pool[Math.min(pool.length - 1, Math.floor(rand() * pool.length))];
-      return { songId, index: ids.indexOf(songId) };
-    }
-    // in order, and playlists: carry on from where this moment got to
-    const at = (state.cursors && state.cursors[moment.id]) || 0;
-    const index = at % ids.length;
-    return { songId: ids[index], index };
+    const played = new Set(state.played || []);
+    let left = ids.filter(id => !played.has(id));
+    if (!left.length) left = ids;
+    return left[Math.min(left.length - 1, Math.floor(rand() * left.length))];
   }
 
-  /* Record that a moment played a song: marks it played and moves the moment's place on. */
-  function notePlayed(moment, library, state, songId) {
+  function notePlayed(state, songId) {
     state.played = state.played || [];
     if (!state.played.includes(songId)) state.played.push(songId);
-    const ids = moment.songIds.filter(id => findSong(library, id));
-    state.cursors = state.cursors || {};
-    state.cursors[moment.id] = (ids.indexOf(songId) + 1) % Math.max(1, ids.length);
     return state;
   }
 
-  /* The playback window for a song in a moment: its start point to its stop point,
+  /* The playback window for a song: its start point to its stop point,
      or to the end of the song when it has no stop point. */
   function clipOf(song) {
     const start = Math.max(0, song.start || 0);
@@ -298,7 +276,7 @@
 
   /* ------------------------------------------------------------ library */
 
-  function newLibrary() { return { format: FORMAT_LIBRARY, version: 2, songs: [], moments: defaultMoments() }; }
+  function newLibrary() { return { format: FORMAT_LIBRARY, version: 3, songs: [], categories: defaultCategories() }; }
 
   function findSong(library, id) { return library.songs.find(s => s.id === id) || null; }
 
@@ -367,12 +345,13 @@
     if (!obj || obj.format !== FORMAT_TEAM || !Array.isArray(obj.players) || !Array.isArray(obj.lineups)) {
       throw new Error('This isn’t a Diamond DJ team file.');
     }
-    obj.moments = Array.isArray(obj.moments) ? obj.moments.map(newMoment) : [];
-    // version 3 (0.6): team songs, hidden common moments, team songs added to common moments
     obj.songs = Array.isArray(obj.songs) ? obj.songs.filter(s => s && s.id && s.path).map(s => ({ ...songFromFile(s.path), ...s })) : [];
-    obj.hidden = Array.isArray(obj.hidden) ? obj.hidden.map(String) : [];
-    obj.extra = obj.extra && typeof obj.extra === 'object' ? Object.fromEntries(Object.entries(obj.extra).map(([k, v]) => [k, Array.isArray(v) ? v.map(String) : []])) : {};
-    obj.version = 3;
+    // version 4 (0.8): key moments are gone; songs the team adds to music categories, categories it hides
+    const ids = v => (Array.isArray(v) ? v.map(String) : []);
+    obj.music = obj.music && typeof obj.music === 'object' ? Object.fromEntries(Object.entries(obj.music).map(([k, v]) => [k, ids(v)])) : {};
+    obj.hiddenCats = ids(obj.hiddenCats);
+    delete obj.moments; delete obj.hidden; delete obj.extra;
+    obj.version = 4;
     obj.players = obj.players.map(p => ({ ...newPlayer(p), id: String(p.id || uid('p')) }));
     obj.lineups = obj.lineups.map(l => ({
       id: String(l.id || uid('l')), name: String(l.name || 'Lineup'),
@@ -389,9 +368,10 @@
       throw new Error('This isn’t a Diamond DJ song library.');
     }
     obj.songs = obj.songs.filter(s => s && s.id && s.path).map(s => ({ ...songFromFile(s.path), ...s }));
-    // version 1 had no common moments: start with the usual ones, empty
-    obj.moments = Array.isArray(obj.moments) ? obj.moments.map(newMoment) : defaultMoments();
-    obj.version = 2;
+    // version 3 (0.8): music categories instead of key moments
+    obj.categories = Array.isArray(obj.categories) ? obj.categories.map(newCategory) : defaultCategories();
+    delete obj.moments;
+    obj.version = 3;
     return obj;
   }
 
@@ -400,7 +380,7 @@
   /* The part of a team the organizer publishes and an update replaces: name, roster, moments.
      Lineups are separate: they belong to whoever is running the game. */
   function setupOf(team) {
-    return { name: team.name, short: team.short, players: team.players, moments: team.moments, songs: team.songs, hidden: team.hidden, extra: team.extra };
+    return { name: team.name, short: team.short, players: team.players, songs: team.songs, music: team.music, hiddenCats: team.hiddenCats };
   }
   // a short fingerprint, to tell whether a device changed the setup since it last synced
   function fingerprint(obj) {
@@ -415,12 +395,12 @@
     return fingerprint(ids.map(id => findSong(library, id)).filter(Boolean));
   }
 
-  /* Every song a team uses: walk-ups, its moments, and (given the library) the common moments it shows. */
+  /* Every song a team uses: walk-ups, its team songs and music, and (given the library) the categories it shows. */
   function teamSongIds(team, library) {
     const ids = new Set();
     for (const p of team.players) if (p.songId) ids.add(p.songId);
-    for (const m of library ? gameMoments(library, team) : team.moments) for (const id of m.songIds) ids.add(id);
-    for (const v of Object.values(team.extra || {})) for (const id of v) ids.add(id);
+    if (library) for (const c of gameMusic(library, team)) for (const id of c.songIds) ids.add(id);
+    for (const v of Object.values(team.music || {})) for (const id of v) ids.add(id);
     for (const s of team.songs || []) ids.add(s.id);
     return ids;
   }
@@ -454,7 +434,7 @@
     for (const s of remote.songs || []) byId.set(s.id, s);
     for (const s of local.songs || []) if (!byId.has(s.id) || keepLocal) byId.set(s.id, s);
     out.songs = [...byId.values()].map(s => ({ ...s }));
-    out.moments = JSON.parse(JSON.stringify(keepLocal || !Array.isArray(remote.moments) ? (local.moments || []) : remote.moments));
+    out.categories = JSON.parse(JSON.stringify(keepLocal || !Array.isArray(remote.categories) ? (local.categories || []) : remote.categories));
     return checkLibrary(out);
   }
 
@@ -481,9 +461,9 @@
     upNextId, nextAfter, comingUp, battingSlot,
     newLibrary, findSong, songFromFile, songLabel, songsUsing,
     walkupPlan, checkTeam, checkLibrary,
-    COLORS, newMoment, defaultMoments, findMoment, removeSongEverywhere, momentsWithSong, pickSong, notePlayed, clipOf,
+    CAT_COLORS, newCategory, defaultCategories, removeSongEverywhere, pickShuffle, notePlayed, clipOf,
     setupOf, fingerprint, setupPrint, libraryPrint, teamSongIds, mergeTeam, mergeLibrary, commonSongsMissing, drivePathFor,
-    gameMoments, poolFor, fileName, teamSongPath,
+    gameMusic, poolFor, fileName, teamSongPath,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Model = api;

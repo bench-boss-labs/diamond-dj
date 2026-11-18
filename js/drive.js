@@ -7,7 +7,7 @@
  *   ├── library.diamond.json        every song's title and cut points (all teams)
  *   ├── Shared Songs/…mp3           each song once, whichever teams use it
  *   └── U13 Bees/                   one folder per team
- *       ├── U13-Bees.diamond.json   roster, moments, lineups
+ *       ├── U13-Bees.diamond.json   roster, team songs, music, lineups
  *       └── Announcements/…mp3      one clip per player
  *
  * On the device a song lives at "Songs/<file>" and a clip at "Announcements/<file>";
@@ -336,7 +336,7 @@ const Drive = {
     return { sent: plan.uploads.length };
   },
 
-  /* Publishing the common library (Diamond DJ Admin): every common song and moment on this device. */
+  /* Publishing the common library (Diamond DJ Admin): every common song and music category on this device. */
   async publishCommonPlan(say = () => {}) {
     const remote = await this.scan(say);
     if (!remote.editor) throw new Error('drive:noteditor');
