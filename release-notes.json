@@ -1,5 +1,19 @@
 [
   {
+    "version": "0.9.1",
+    "date": "2026-11-18",
+    "notes": [
+      {
+        "type": "improved",
+        "text": "Game: Edit order is now a pencil button right beside “Batting order”."
+      },
+      {
+        "type": "improved",
+        "text": "Phones show the whole batting order by default. “Show just the next 3” shortens it."
+      }
+    ]
+  },
+  {
     "version": "0.9.0",
     "date": "2026-11-18",
     "notes": [

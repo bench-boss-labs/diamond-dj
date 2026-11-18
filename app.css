@@ -677,3 +677,7 @@ body.locked .ws-tabbar { display: none; }
   .ws-tabbar button { flex: 1 1 0; min-width: 0; padding: 0 4px; font-size: 15px; }
   .pub-note { padding: 6px 12px; font-size: 14px; }
 }
+
+/* ------------------------------------------------------------ 1.0: Edit order is a pencil beside "Batting order" */
+.btn.icon-edit { width: 44px; min-width: 44px; height: 44px; min-height: 44px; padding: 0; display: inline-grid; place-items: center; }
+.btn.icon-edit svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }

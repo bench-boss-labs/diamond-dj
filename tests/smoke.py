@@ -292,10 +292,11 @@ with sync_playwright() as p:
     check('phone: only the Walkups tab shows at first', ph.is_visible('.upnext') and not ph.is_visible('.pad'))
     ph.evaluate("setLocked(false)"); time.sleep(0.6)
     ph.reload(); ph.wait_for_selector('.upnext')
-    # P1: next three batters, Show all, one-row dock
-    check('phone game: next 3 batters under the card', ph.locator('.order .item').count() == 3)
+    # P1: the whole batting order by default, or just the next three; one-row dock
+    check('phone game: every batter shown by default', ph.locator('.order .item').count() == ph.evaluate("lineup().order.length"))
+    check('phone game: Edit order is a pencil beside Batting order', ph.evaluate("(() => { const b = document.querySelector('.icon-edit'); return !!b && b.previousElementSibling.textContent.trim() === 'Batting order' && b.innerText.trim() === ''; })()"))
     ph.click('[data-act="show-batters"]')
-    check('phone game: Show all lists every batter', ph.locator('.order .item').count() == ph.evaluate("lineup().order.length"))
+    check('phone game: Show just the next 3', ph.locator('.order .item').count() == 3)
     ph.click('[data-act="show-batters"]')
     dock_h = ph.evaluate("Math.round(document.querySelector('.dock').getBoundingClientRect().height)")
     check(f'phone: now-playing bar is one row ({dock_h}px)', dock_h <= 72)

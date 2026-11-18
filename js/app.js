@@ -42,7 +42,7 @@ let settings = { ...DEFAULTS };
 const stored = new Set(); // paths of audio files on this device
 
 const ui = { view: 'game', playerId: null, songId: null, lineupId: null, songQuery: '', gameTab: 'walkups', catId: null,
-  phoneDetail: false, showAllBatters: false };
+  phoneDetail: false, showAllBatters: true };
 const TEAM_VIEWS = ['roster', 'songs', 'music', 'teaminfo', 'publish'];   // the Team screen (team organizers)
 const ADMIN_VIEWS = ['cteams', 'cpeople', 'csongs', 'cmusic', 'cpublish'];   // the Admin screen (Diamond DJ Admin)
 const SETUP_VIEWS = TEAM_VIEWS.concat(ADMIN_VIEWS);
@@ -279,7 +279,7 @@ function walkupsHtml() {
     </div>`;
   })() : `<div class="empty"><b>Nobody is in the batting order.</b><br>Add players back from the bench in Lineup.</div>`;
 
-  // phones show the next three batters after the card, unless the volunteer asks for all of them
+  // the whole batting order by default; on a phone the volunteer can shrink it to the next three
   const compact = phone() && !ui.showAllBatters;
   const shown = compact ? Model.comingUp(l, game.upNext).slice(0, 3) : l.order;
   const rows = shown.map(id => {
@@ -294,16 +294,17 @@ function walkupsHtml() {
       <span class="tag">${esc(tag)}</span></button>`;
   }).join('');
 
-  return `<div class="row"><span class="section-title">Batting order</span><span class="spacer"></span>
+  return `<div class="row"><span class="section-title">Batting order</span>
+        <button class="btn icon-edit" data-act="edit-order" aria-label="Edit order" title="Edit order"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>
+        <span class="spacer"></span>
         <label class="field" style="flex-direction:row;align-items:center;gap:8px"><span>Lineup</span>
           <select id="gameLineup" style="height:40px;font-size:15px;width:auto">${lineupOptions}</select></label></div>
       ${card}
-      ${phone() ? '' : `<div class="row"><button class="btn" data-act="edit-order">Edit order</button><button class="btn" data-act="top">Start from batter 1</button>
+      ${phone() ? '' : `<div class="row"><button class="btn" data-act="top">Start from batter 1</button>
         <button class="btn" data-act="new-game">New game</button></div>`}
       <div class="list order">${rows}</div>
       ${phone() ? `<div class="row phone-row">
-        <button class="btn" data-act="show-batters">${ui.showAllBatters ? 'Show fewer' : `Show all ${l.order.length} batters`}</button>
-        <button class="btn" data-act="edit-order">Edit order</button></div>
+        <button class="btn" data-act="show-batters">${ui.showAllBatters ? 'Show just the next 3' : `Show all ${l.order.length} batters`}</button></div>
         ${ui.showAllBatters ? '<div class="row phone-row"><button class="btn" data-act="top">Start from batter 1</button><button class="btn" data-act="new-game">New game</button></div>' : ''}` : ''}
       <p class="hint">Tap a player to play them · press and hold to make them up next${l.bench.length ? `<br>On the bench: ${l.bench.map(id => esc(Model.playerName(player(id)))).join(', ')}` : ''}</p>`;
 }
@@ -1914,7 +1915,7 @@ function openHelp(section) {
     <h3>Common questions</h3>
     ${q('Nothing plays.', `<p>Check the tablet's volume, the <b>Volume</b> slider at the bottom, and that the speaker is connected. A batter marked <b>Not ready</b> has no announcement or song on this device yet: tap <b>Settings › Check for updates</b> on wifi.</p>`)}
     ${q('A batter says “No announcement”.', `<p>Their song still plays, with no announcement first. The clip is added in <b>Roster</b> (tap the player, then <b>Choose a clip</b>), or comes with <b>Check for updates</b> once the organizer publishes it.</p>`)}
-    ${q('The batting order changed (someone is late, sick or leaving early).', `<p>On <b>Game</b>, tap <b>Edit order</b>: drag a batter to move them, or tap <b>Bench</b> to take them out (and <b>Add back</b> when they arrive). It saves as you go. Saved lineups for other games are in <b>Settings › Lineups</b>.</p>`)}
+    ${q('The batting order changed (someone is late, sick or leaving early).', `<p>On <b>Game</b>, tap the pencil next to <b>Batting order</b>: drag a batter to move them, or tap <b>Bench</b> to take them out (and <b>Add back</b> when they arrive). It saves as you go. Saved lineups for other games are in <b>Settings › Lineups</b>.</p>`)}
     ${q('The wrong song or player played.', `<p>Tap <b>Fade out</b>, then tap the right batter in the list. To put the order back where it should be, press and hold the batter who should be up next.</p>`)}
     ${q('A music category is empty.', `<p>It has no songs yet. A team organizer adds them in <b>Settings › Team setup › Music</b>; the Diamond DJ Admin adds common ones in <b>Settings › Admin › Music categories</b>.</p>`)}
     ${q('Settings is gone.', `<p>The app is locked. Press and hold the lock button at the top for a second and a half.</p>`)}

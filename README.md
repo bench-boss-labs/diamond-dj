@@ -49,8 +49,8 @@ The Admin can try the other roles with Settings › Advanced › View as.
 
 - **Game** (the only main screen): team, Lock, Help and Settings at the top. Big "Up next" card with
   **Play walkup** (announcement, then the song) and **Skip**; the batting order auto-advances and
-  wraps. Tap any batter to play them; press and hold to make them up next. Pick the lineup and
-  **Edit order** above the batting order; **New game** (tap twice) goes back to batter 1.
+  wraps. Tap any batter to play them; press and hold to make them up next. Pick the lineup above the batting order
+  and edit it with the pencil beside **Batting order**; **New game** (tap twice) goes back to batter 1.
 - **Music** on the Game screen (phones: the Music tab): colour-coded categories (Warm-up, Pitchers,
   Crowd favourites, Post-game celebrations to start). Each shows **Shuffle** (a song not played yet
   this game) and a button per song: tap to play, tap again to fade. Played songs are dimmed. Clips
@@ -65,7 +65,7 @@ The Admin can try the other roles with Settings › Advanced › View as.
   Set stop here / Hear the clip, exact seconds, fade and volume; add a song to music categories.
 - **Lock**: hides Settings (and so all setup). The Game screen, Edit order and Help stay open.
   Press and hold 1.5 s to unlock.
-- Phones: the Game screen has Walk-ups and Music tabs and shows the next 3 batters; setup lists open
+- Phones: the Game screen has Walk-ups and Music tabs and lists every batter (or just the next 3); setup lists open
   one item at a time; dialogs open full screen. Tablets show walk-ups and Music side by side.
 - **Several teams**: the team button at the top left switches teams, makes a new one or removes one
   from the device. Each team keeps its own roster, lineups, music and game; common songs are shared.
