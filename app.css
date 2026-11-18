@@ -526,6 +526,12 @@ body.ws-lineup .head { border-bottom: 4px solid var(--gold); }
 @media (max-width: 640px) {
   .game-wrap[data-tab="music"] [data-gtab="music"] { display: flex; }
   .mpads { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .cat-chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
-  .cat-chip { flex: none; }
+  /* every category visible, no sideways scrolling: the chips wrap into rows of two */
+  .cat-chips { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .cat-chip { min-width: 0; padding: 0 10px; font-size: 15px; justify-content: flex-start; }
+  .cat-chip span { min-width: 0; line-height: 1.1; text-align: left; padding: 6px 0; }
+  .cat-chip em { margin-left: auto; }
 }
+/* the chip row scrolls sideways on a phone: its column must be allowed to be narrower than the chips */
+[data-gtab="music"], .game-cols > section { min-width: 0; }
+.cat-chips { min-width: 0; max-width: 100%; }

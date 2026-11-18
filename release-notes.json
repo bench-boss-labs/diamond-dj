@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.8.1",
+    "date": "2026-11-17",
+    "notes": [
+      {
+        "type": "fixed",
+        "text": "Phones: the Music categories wrap into rows, so every category is on screen with no sideways scrolling, and the one you pick stays in view."
+      }
+    ]
+  },
+  {
     "version": "0.8.0",
     "date": "2026-11-17",
     "notes": [
