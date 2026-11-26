@@ -82,7 +82,7 @@ The Admin can try the other roles with Settings › Advanced › View as.
   "Diamond DJ updated to x.y.z · See what's new".
 - Offline install (service worker), screen kept awake during play where supported.
 
-**Full guide:** https://scalisec.github.io/diamond-dj/guide/
+**Full guide:** https://bench-boss-labs.github.io/diamond-dj/guide/
 
 ## Google Drive
 
@@ -107,7 +107,7 @@ the team file is replaced only after every song and clip uploaded.
 4. Audience > **Test users**: add your Google account and each volunteer's (up to 100).
 5. Data Access > Add scopes: `.../auth/drive.readonly` and `.../auth/drive`.
 6. Clients > Create client > **Web application**. Authorized JavaScript origin
-   `https://scalisec.github.io`; redirect URI `https://scalisec.github.io/diamond-dj/`.
+   `https://bench-boss-labs.github.io`; redirect URI `https://bench-boss-labs.github.io/diamond-dj/`.
 7. Put the client ID in `DRIVE.clientId` in `js/drive.js` (or paste it on a device in Settings >
    Drive connection) and publish.
 

@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.9.2",
+    "date": "2026-11-25",
+    "quiet": true,
+    "notes": [
+      {
+        "type": "improved",
+        "text": "Diamond DJ has moved to the Bench Boss Labs account: the app is now at bench-boss-labs.github.io/diamond-dj, and the Google Drive folder belongs to benchbosslabs."
+      }
+    ]
+  },
+  {
     "version": "0.9.1",
     "date": "2026-11-18",
     "notes": [
